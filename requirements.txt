@@ -1,0 +1,3 @@
+# 锚定解释器 E:\Miniconda\python.exe（Python 3.9 兼容）；scripts/ 依赖仅此两项
+Pillow>=9.0
+jsonschema>=4.0

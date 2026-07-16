@@ -1,0 +1,42 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {"source_image": "amp.png", "title": "single-stage amp",
+           "grid": {"unit_cm": 1.0, "snap": 0.5}, "canvas": {"w": 7, "h": 8}},
+  "style": {"flavor": "american"},
+  "nets": [{"name": "N_IN"}, {"name": "N_B"}, {"name": "N_C"}, {"name": "VCC"}, {"name": "GND"}],
+  "components": [
+    {"id": "R1", "type": "resistor", "from": [1, 4], "to": [3, 4],
+     "pins": [{"name": "1", "net": "N_IN"}, {"name": "2", "net": "N_B"}],
+     "label": "R_1", "value": "10\\mathrm{k}\\Omega", "label_side": "above", "value_side": "below"},
+    {"id": "C1", "type": "capacitor", "from": [3, 4], "to": [3, 2],
+     "pins": [{"name": "1", "net": "N_B"}, {"name": "2", "net": "GND"}],
+     "label": "C_1", "value": "100\\mathrm{nF}", "label_side": "right", "value_side": "left"},
+    {"id": "R2", "type": "resistor", "from": [5, 6], "to": [5, 7.5],
+     "pins": [{"name": "1", "net": "N_C"}, {"name": "2", "net": "VCC"}],
+     "label": "R_C", "value": "2\\mathrm{k}\\Omega", "label_side": "right", "value_side": "left"},
+    {"id": "Q1", "type": "npn", "at": [5, 4], "rotate": 0, "mirror": false,
+     "pins": [{"name": "B", "net": "N_B", "at": [4.3, 4]},
+              {"name": "C", "net": "N_C", "at": [5, 4.7]},
+              {"name": "E", "net": "GND", "at": [5, 3.3]}],
+     "label": "Q_1", "label_side": "right"},
+    {"id": "VCC1", "type": "vcc", "at": [5, 7.5], "pins": [{"name": "p", "net": "VCC"}],
+     "label": "+12\\mathrm{V}", "label_side": "above"},
+    {"id": "GND1", "type": "ground", "at": [3, 2], "pins": [{"name": "p", "net": "GND"}]},
+    {"id": "GND2", "type": "ground", "at": [5, 2], "pins": [{"name": "p", "net": "GND"}]}
+  ],
+  "wires": [
+    {"id": "W1", "points": [{"xy": [0, 4]}, {"pin": "R1.1"}]},
+    {"id": "W2", "points": [{"pin": "R1.2"}, {"pin": "Q1.B"}]},
+    {"id": "W3", "points": [{"pin": "Q1.C"}, {"pin": "R2.1"}]},
+    {"id": "W4", "points": [{"pin": "Q1.E"}, {"xy": [5, 2]}]}
+  ],
+  "junctions": [{"at": [3, 4]}],
+  "crossings": [],
+  "terminals": [{"at": [0, 4], "style": "ocirc", "label": "a", "label_side": "left"}],
+  "texts": [{"content": "u_i", "at": [0.2, 4.6], "anchor": "south east", "kind": "annotation"}],
+  "regions": [
+    {"name": "input-coupling", "component_ids": ["R1", "C1", "GND1"]},
+    {"name": "amplifier", "component_ids": ["Q1", "R2", "VCC1", "GND2"]}
+  ],
+  "unknowns": []
+}

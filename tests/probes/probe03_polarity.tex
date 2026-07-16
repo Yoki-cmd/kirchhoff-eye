@@ -1,0 +1,30 @@
+% probe03: 极性/方向语义实测。每个 bipole 从 F(from) 画到 T(to)，蓝字标端点。
+% 目视判定：哪端是 阳极/长板/+/箭头指向，结论写死进 references/circuitikz-style.md
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\newcommand{\ft}[2]{\node[font=\tiny,blue,anchor=north] at (#1) {F};
+                    \node[font=\tiny,blue,anchor=north] at (#2) {T};}
+\begin{document}
+\begin{circuitikz}
+  \draw (0,14) to[D] ++(2,0);        \ft{0,13.9}{2,13.9} \node[anchor=west,font=\ttfamily] at (2.6,14) {D};
+  \draw (6,14) to[V] ++(2,0);        \ft{6,13.9}{8,13.9} \node[anchor=west,font=\ttfamily] at (8.6,14) {V};
+  \draw (0,12) to[cV] ++(2,0);       \ft{0,11.9}{2,11.9} \node[anchor=west,font=\ttfamily] at (2.6,12) {cV};
+  \draw (6,12) to[I] ++(2,0);        \ft{6,11.9}{8,11.9} \node[anchor=west,font=\ttfamily] at (8.6,12) {I};
+  \draw (0,10) to[cI] ++(2,0);       \ft{0,9.9}{2,9.9}   \node[anchor=west,font=\ttfamily] at (2.6,10) {cI};
+  \draw (6,10) to[battery1] ++(2,0); \ft{6,9.9}{8,9.9}   \node[anchor=west,font=\ttfamily] at (8.6,10) {battery1};
+  \draw (0,8)  to[battery2] ++(2,0); \ft{0,7.9}{2,7.9}   \node[anchor=west,font=\ttfamily] at (2.6,8)  {battery2};
+  \draw (6,8)  to[battery] ++(2,0);  \ft{6,7.9}{8,7.9}   \node[anchor=west,font=\ttfamily] at (8.6,8)  {battery};
+  \draw (0,6)  to[cC] ++(2,0);       \ft{0,5.9}{2,5.9}   \node[anchor=west,font=\ttfamily] at (2.6,6)  {cC};
+  \draw (6,6)  to[eC] ++(2,0);       \ft{6,5.9}{8,5.9}   \node[anchor=west,font=\ttfamily] at (8.6,6)  {eC};
+  % invert 选项：符号沿路径轴翻转（若原生极性与 IR 约定不合，序列化用它翻）
+  \draw (0,4)  to[V, invert] ++(2,0);  \ft{0,3.9}{2,3.9} \node[anchor=west,font=\ttfamily] at (2.6,4) {V invert};
+  \draw (6,4)  to[D, invert] ++(2,0);  \ft{6,3.9}{8,3.9} \node[anchor=west,font=\ttfamily] at (8.6,4) {D invert};
+  % 垂直方向对照：V 从下到上
+  \draw (0,0)  to[V] ++(0,2.5);   \node[font=\tiny,blue,anchor=east] at (-0.1,0) {F};
+  \node[font=\tiny,blue,anchor=east] at (-0.1,2.5) {T};
+  \node[anchor=west,font=\ttfamily] at (0.6,1.25) {V up};
+  \draw (5,0)  to[battery1] ++(0,2.5); \node[font=\tiny,blue,anchor=east] at (4.9,0) {F};
+  \node[font=\tiny,blue,anchor=east] at (4.9,2.5) {T};
+  \node[anchor=west,font=\ttfamily] at (5.6,1.25) {battery1 up};
+\end{circuitikz}
+\end{document}

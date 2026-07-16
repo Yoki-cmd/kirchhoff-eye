@@ -1,0 +1,29 @@
+% probe03b: battery1/battery2 长短板端向 + jump crossing 谁跳线 的高倍放大判读
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\begin{document}
+\begin{circuitikz}
+  % battery1 水平 F->T
+  \draw (0,4) to[battery1] ++(3,0);
+  \node[font=\small,blue,anchor=north] at (0,3.8) {F};
+  \node[font=\small,blue,anchor=north] at (3,3.8) {T};
+  \node[anchor=west,font=\ttfamily] at (3.6,4) {battery1};
+  % battery2 水平
+  \draw (8,4) to[battery2] ++(3,0);
+  \node[font=\small,blue,anchor=north] at (8,3.8) {F};
+  \node[font=\small,blue,anchor=north] at (11,3.8) {T};
+  \node[anchor=west,font=\ttfamily] at (11.6,4) {battery2};
+  % battery1 垂直 F(下)->T(上)
+  \draw (1,-3) to[battery1] ++(0,3);
+  \node[font=\small,blue,anchor=east] at (0.8,-3) {F};
+  \node[font=\small,blue,anchor=east] at (0.8,0) {T};
+  \node[anchor=west,font=\ttfamily] at (1.6,-1.5) {battery1 up};
+  % jump crossing 放大：水平线 west->east，垂直线 south->north
+  \node[jump crossing] (jc) at (8,-1.5) {};
+  \draw (6.5,-1.5) -- (jc.west);
+  \draw (jc.east) -- (9.5,-1.5);
+  \draw (8,-3) -- (jc.south);
+  \draw (jc.north) -- (8,0);
+  \node[anchor=west,font=\ttfamily] at (9.9,-1.5) {jump crossing};
+\end{circuitikz}
+\end{document}

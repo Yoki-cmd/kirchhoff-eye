@@ -1,0 +1,21 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "source.png",
+    "title": "",
+    "grid": {"unit_cm": 1.0, "snap": 0.5},
+    "canvas": {"w": 10, "h": 8}
+  },
+  "style": {"flavor": "american"},
+  "routing": {"orthogonal": "strict", "grid_snap": "warn", "grid_step": 0.5},
+  "nodes": [],
+  "nets": [],
+  "components": [],
+  "wires": [],
+  "junctions": [],
+  "crossings": [],
+  "terminals": [],
+  "texts": [],
+  "regions": [],
+  "unknowns": []
+}

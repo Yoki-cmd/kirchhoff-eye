@@ -1,0 +1,31 @@
+% probe06: 单端件 / 交叉 node / 端点圈 实测
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\newcommand{\ank}[2]{\fill[red] (#1) circle (1.5pt) node[red,font=\tiny,anchor=south west] {#2};}
+\begin{document}
+\begin{circuitikz}
+  % 单端件
+  \draw (0,6) -- ++(0,-0.5) node[ground]{};   \node[font=\ttfamily\scriptsize] at (0,4.6) {ground};
+  \draw (3,6) -- ++(0,0.5)  node[vcc]{};      \node[font=\ttfamily\scriptsize] at (3,4.6) {vcc};
+  \draw (6,6) -- ++(0,-0.5) node[vee]{};      \node[font=\ttfamily\scriptsize] at (6,4.6) {vee};
+  % 端点圈：ocirc 与 circ
+  \draw (9,6) -- ++(1,0) node[ocirc]{};       \node[font=\ttfamily\scriptsize] at (9.5,4.6) {ocirc};
+  \draw (12,6) -- ++(1,0) node[circ]{};       \node[font=\ttfamily\scriptsize] at (12.5,4.6) {circ};
+
+  % jump crossing：接线用 anchor 实测
+  \node[jump crossing] (jc) at (2,1) {};
+  \draw (0,1) -- (jc.west);
+  \draw (jc.east) -- (4,1);
+  \draw (2,-1) -- (jc.south);
+  \draw (jc.north) -- (2,3);
+  \node[font=\ttfamily\scriptsize] at (2,-1.5) {jump crossing (west/east/south/north)};
+
+  % plain crossing node（对照：不用 node 直接画线穿过）
+  \node[crossing] (pc) at (8,1) {};
+  \draw (6,1) -- (pc.west);
+  \draw (pc.east) -- (10,1);
+  \draw (8,-1) -- (pc.south);
+  \draw (pc.north) -- (8,3);
+  \node[font=\ttfamily\scriptsize] at (8,-1.5) {crossing};
+\end{circuitikz}
+\end{document}

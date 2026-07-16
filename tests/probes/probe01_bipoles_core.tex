@@ -1,0 +1,20 @@
+% probe01: 高置信两端件名字验证（每个符号旁标注其 circuitikz 名）
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\begin{document}
+\begin{circuitikz}
+  \draw (0,12) to[R] ++(2,0);         \node[anchor=west,font=\ttfamily] at (2.3,12) {R};
+  \draw (6,12) to[C] ++(2,0);         \node[anchor=west,font=\ttfamily] at (8.3,12) {C};
+  \draw (0,10) to[L] ++(2,0);         \node[anchor=west,font=\ttfamily] at (2.3,10) {L};
+  \draw (6,10) to[D] ++(2,0);         \node[anchor=west,font=\ttfamily] at (8.3,10) {D};
+  \draw (0,8)  to[V] ++(2,0);         \node[anchor=west,font=\ttfamily] at (2.3,8)  {V};
+  \draw (6,8)  to[I] ++(2,0);         \node[anchor=west,font=\ttfamily] at (8.3,8)  {I};
+  \draw (0,6)  to[cV] ++(2,0);        \node[anchor=west,font=\ttfamily] at (2.3,6)  {cV};
+  \draw (6,6)  to[cI] ++(2,0);        \node[anchor=west,font=\ttfamily] at (8.3,6)  {cI};
+  \draw (0,4)  to[battery] ++(2,0);   \node[anchor=west,font=\ttfamily] at (2.3,4)  {battery};
+  \draw (6,4)  to[battery1] ++(2,0);  \node[anchor=west,font=\ttfamily] at (8.3,4)  {battery1};
+  \draw (0,2)  to[spst] ++(2,0);      \node[anchor=west,font=\ttfamily] at (2.3,2)  {spst};
+  \draw (6,2)  to[ammeter] ++(2,0);   \node[anchor=west,font=\ttfamily] at (8.3,2)  {ammeter};
+  \draw (0,0)  to[voltmeter] ++(2,0); \node[anchor=west,font=\ttfamily] at (2.3,0)  {voltmeter};
+\end{circuitikz}
+\end{document}

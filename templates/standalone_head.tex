@@ -1,0 +1,12 @@
+% 文档头参考模板（ir2tikz.py 自动生成同款；此文件供人工/其他宿主参考）
+% ASCII 版：
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}   % european = GB 国标画法（电阻矩形框）
+\ctikzset{bipoles/length=1.0cm}     % 样式参数唯一合法位置（config.json style.ctikzset）
+\begin{document}
+\begin{circuitikz}
+% ... 正文 ...
+\end{circuitikz}
+\end{document}
+% 排版内容含中文时在 documentclass 后加一行 \usepackage{ctex}，
+% 并用 lualatex 编译（render.py --engine auto 会自动处理）。

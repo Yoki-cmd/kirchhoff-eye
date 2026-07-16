@@ -1,0 +1,28 @@
+% probe04: l= / l_= / a= / a^= 与元件走向（→ ← ↑ ↓）的落位实测
+% 文字含义：L = l= 给的标签, Lu = l_= 给的标签; A = a= 给的, Au = a^= 给的
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\begin{document}
+\begin{circuitikz}
+  % 水平 →
+  \draw (0,10) to[R, l=L, a=A] ++(2,0);
+  \node[font=\ttfamily\tiny, anchor=west] at (2.4,10) {dir:right l/a};
+  \draw (6,10) to[R, l_=Lu, a^=Au] ++(2,0);
+  \node[font=\ttfamily\tiny, anchor=west] at (8.4,10) {dir:right lu/au};
+  % 水平 ←（从右画到左）
+  \draw (2,7.5) to[R, l=L, a=A] ++(-2,0);
+  \node[font=\ttfamily\tiny, anchor=west] at (2.4,7.5) {dir:left l/a};
+  \draw (8,7.5) to[R, l_=Lu, a^=Au] ++(-2,0);
+  \node[font=\ttfamily\tiny, anchor=west] at (8.4,7.5) {dir:left lu/au};
+  % 垂直 ↑
+  \draw (0,0) to[R, l=L, a=A] ++(0,2);
+  \node[font=\ttfamily\tiny, anchor=west] at (-0.5,2.6) {dir:up l/a};
+  \draw (4,0) to[R, l_=Lu, a^=Au] ++(0,2);
+  \node[font=\ttfamily\tiny, anchor=west] at (3.5,2.6) {dir:up lu/au};
+  % 垂直 ↓（从上画到下）
+  \draw (8,2) to[R, l=L, a=A] ++(0,-2);
+  \node[font=\ttfamily\tiny, anchor=west] at (7.5,2.6) {dir:down l/a};
+  \draw (12,2) to[R, l_=Lu, a^=Au] ++(0,-2);
+  \node[font=\ttfamily\tiny, anchor=west] at (11.5,2.6) {dir:down lu/au};
+\end{circuitikz}
+\end{document}

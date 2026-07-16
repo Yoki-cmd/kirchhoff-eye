@@ -1,0 +1,16 @@
+% probe02: 风险名字候选（电位器/极性电容/齐纳/LED/battery2）——nonstopmode 批量试错
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\begin{document}
+\begin{circuitikz}
+  \draw (0,8) to[pR] ++(2,0);       \node[anchor=west,font=\ttfamily] at (2.3,8) {pR};
+  \draw (6,8) to[cC] ++(2,0);       \node[anchor=west,font=\ttfamily] at (8.3,8) {cC};
+  \draw (0,6) to[eC] ++(2,0);       \node[anchor=west,font=\ttfamily] at (2.3,6) {eC};
+  \draw (6,6) to[zD] ++(2,0);       \node[anchor=west,font=\ttfamily] at (8.3,6) {zD};
+  \draw (0,4) to[leD] ++(2,0);      \node[anchor=west,font=\ttfamily] at (2.3,4) {leD};
+  \draw (6,4) to[battery2] ++(2,0); \node[anchor=west,font=\ttfamily] at (8.3,4) {battery2};
+  % 电位器 wiper anchor 试用
+  \draw (0,2) to[pR, name=P1] ++(2,0); \draw[red] (P1.wiper) -- ++(0,0.8);
+  \node[anchor=west,font=\ttfamily] at (2.3,2) {pR.wiper};
+\end{circuitikz}
+\end{document}

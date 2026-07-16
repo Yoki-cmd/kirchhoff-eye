@@ -1,0 +1,32 @@
+{
+  "version": "0.1.0",
+  "interpreter": "E:\\Miniconda\\python.exe",
+  "max_rounds": 3,
+  "render": {
+    "dpi": 300,
+    "engine": "auto",
+    "timeout_s": 120
+  },
+  "compare": {
+    "side_height_px": 1200
+  },
+  "grid": {
+    "unit_cm": 1.0,
+    "snap": 0.5
+  },
+  "canvas_max": { "w": 30, "h": 20 },
+  "span": { "recommended": 2.0, "min": 1.0 },
+  "style": {
+    "flavor_default": "american",
+    "ctikzset": "bipoles/length=1.0cm"
+  },
+  "score_weights": {
+    "netlist": { "f1": 0.5, "connectivity": 0.4, "values": 0.1 },
+    "layout": { "bearing": 0.4, "rmse": 0.2, "wire_shape": 0.2, "label_side": 0.1, "orientation": 0.1 },
+    "total": { "netlist": 0.6, "layout": 0.4 }
+  },
+  "score_match": {
+    "align": "translation+uniform_scale",
+    "component_match_max_dist": 1.5
+  }
+}

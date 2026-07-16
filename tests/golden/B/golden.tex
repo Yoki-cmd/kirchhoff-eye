@@ -1,0 +1,46 @@
+% golden B — 人手序列化（ir2tikz 的对照真值）
+% source: tests/golden/B/ir.json  (single-stage amp, PLAN.md §6.6 金样)
+% nets:
+%   N_IN: port a(0,4), R1.1
+%   N_B : R1.2, C1.1, Q1.B          <- junction (3,4)
+%   N_C : Q1.C, R2.1
+%   VCC : R2.2, VCC1.p
+%   GND : C1.2, Q1.E, GND1.p, GND2.p
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\ctikzset{bipoles/length=1.0cm}
+\begin{document}
+\begin{circuitikz}
+
+%% ==== [region] input-coupling ====
+\coordinate (N_B) at (3,4);
+\draw (1,4) to[R, l=$R_1$, a=$10\mathrm{k}\Omega$, name=R1] (3,4);
+\draw (3,4) to[C, l=$C_1$, a=$100\mathrm{nF}$, name=C1] (3,2);
+\node[ground] at (3,2) {};
+
+%% ==== [region] amplifier ====
+\node[npn] (Q1) at (5,4) {};
+\node[anchor=west] at (5.2,4) {$Q_1$};
+\draw (5,6) to[R, l_=$R_C$, a^=$2\mathrm{k}\Omega$, name=R2] (5,7.5);
+\node[vcc] at (5,7.5) {};
+\node[anchor=south] at (5,8) {$+12\mathrm{V}$};
+\node[ground] at (5,2) {};
+
+%% ==== wires ====
+% net N_IN
+\draw (0,4) -- (1,4);   % W1: port a -> R1.1
+% net N_B
+\draw (N_B) -- (Q1.B);  % W2: R1.2 -> Q1.B
+% net N_C
+\draw (Q1.C) -- (5,6);  % W3: Q1.C -> R2.1
+% net GND
+\draw (Q1.E) -- (5,2);  % W4: Q1.E -> GND2
+
+%% ==== junctions / terminals / texts ====
+\node[circ] at (N_B) {};
+\node[ocirc] at (0,4) {};
+\node[anchor=east] at (-0.3,4) {$a$};
+\node[anchor=south east] at (0.2,4.6) {$u_i$};
+
+\end{circuitikz}
+\end{document}

@@ -1,0 +1,41 @@
+% golden A — 人手序列化（ir2tikz 的对照真值）
+% source: tests/golden/A/ir.json  (voltage divider with bypass cap and port)
+% nets:
+%   N_IN : V1.2, R1.1
+%   N_MID: R1.2, R2.1, C1.1, port a(5.5,2)   <- junction (2,2)
+%   GND  : V1.1, R2.2, C1.2, GND1.p
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\ctikzset{bipoles/length=1.0cm}
+\begin{document}
+\begin{circuitikz}
+
+%% ==== [region] source ====
+\draw (0,0) to[V, invert, l=$U_s$, a=$6\mathrm{V}$, name=V1] (0,4);
+
+%% ==== [region] divider ====
+\coordinate (N_MID) at (2,2);
+\coordinate (GND) at (2,0);
+\draw (2,4) to[R, l=$R_1$, a=$1\mathrm{k}\Omega$, name=R1] (2,2);
+\draw (2,2) to[R, l=$R_2$, a=$2\mathrm{k}\Omega$, name=R2] (2,0);
+
+%% ==== [region] output ====
+\draw (4,2) to[C, l=$C_1$, a=$100\mathrm{nF}$, name=C1] (4,0);
+\node[ground] at (4,0) {};
+
+%% ==== wires ====
+% net N_IN
+\draw (0,4) -- (2,4);              % W1: V1.2 -> R1.1
+% net GND
+\draw (0,0) -- (GND) -- (4,0);     % W2: V1.1 -> R2.2 -> C1.2
+% net N_MID
+\draw (N_MID) -- (4,2) -- (5.5,2); % W3: R1.2 -> C1.1 -> port a
+
+%% ==== junctions / terminals / texts ====
+\node[circ] at (N_MID) {};
+\node[ocirc] at (5.5,2) {};
+\node[anchor=west] at (5.8,2) {$a$};
+\node[anchor=south] at (5.5,2.8) {$u_o$};
+
+\end{circuitikz}
+\end{document}

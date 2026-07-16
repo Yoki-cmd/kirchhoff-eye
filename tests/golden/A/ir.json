@@ -1,0 +1,41 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {"source_image": "synthetic://golden-A", "title": "voltage divider with bypass cap and port",
+           "grid": {"unit_cm": 1.0, "snap": 0.5}, "canvas": {"w": 7, "h": 5}},
+  "style": {"flavor": "american"},
+  "nets": [
+    {"name": "N_IN", "note": "源正极到 R1 顶"},
+    {"name": "N_MID", "note": "分压中点: R1.2/R2.1/C1.1/端口"},
+    {"name": "GND", "note": "底轨: V1 负/R2 底/C1 底/接地"}
+  ],
+  "components": [
+    {"id": "V1", "type": "vsource", "from": [0, 0], "to": [0, 4],
+     "pins": [{"name": "1", "net": "GND"}, {"name": "2", "net": "N_IN"}],
+     "label": "U_s", "value": "6\\mathrm{V}", "label_side": "left", "value_side": "right"},
+    {"id": "R1", "type": "resistor", "from": [2, 4], "to": [2, 2],
+     "pins": [{"name": "1", "net": "N_IN"}, {"name": "2", "net": "N_MID"}],
+     "label": "R_1", "value": "1\\mathrm{k}\\Omega", "label_side": "right", "value_side": "left"},
+    {"id": "R2", "type": "resistor", "from": [2, 2], "to": [2, 0],
+     "pins": [{"name": "1", "net": "N_MID"}, {"name": "2", "net": "GND"}],
+     "label": "R_2", "value": "2\\mathrm{k}\\Omega", "label_side": "right", "value_side": "left"},
+    {"id": "C1", "type": "capacitor", "from": [4, 2], "to": [4, 0],
+     "pins": [{"name": "1", "net": "N_MID"}, {"name": "2", "net": "GND"}],
+     "label": "C_1", "value": "100\\mathrm{nF}", "label_side": "right", "value_side": "left"},
+    {"id": "GND1", "type": "ground", "at": [4, 0], "pins": [{"name": "p", "net": "GND"}]}
+  ],
+  "wires": [
+    {"id": "W1", "points": [{"pin": "V1.2"}, {"pin": "R1.1"}]},
+    {"id": "W2", "points": [{"pin": "V1.1"}, {"xy": [2, 0]}, {"pin": "C1.2"}]},
+    {"id": "W3", "points": [{"pin": "R1.2"}, {"xy": [4, 2]}, {"xy": [5.5, 2]}]}
+  ],
+  "junctions": [{"at": [2, 2]}],
+  "crossings": [],
+  "terminals": [{"at": [5.5, 2], "style": "ocirc", "label": "a", "label_side": "right"}],
+  "texts": [{"content": "u_o", "at": [5.5, 2.8], "anchor": "south", "kind": "annotation"}],
+  "regions": [
+    {"name": "source", "component_ids": ["V1"]},
+    {"name": "divider", "component_ids": ["R1", "R2"]},
+    {"name": "output", "component_ids": ["C1", "GND1"]}
+  ],
+  "unknowns": []
+}

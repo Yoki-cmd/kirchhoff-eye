@@ -1,0 +1,27 @@
+% probe07: 位姿变换语义机读实测（不目测）。
+% 对 npn 施加 4 种变换，\pgfpointanchor 把 B/C/E/center 的坐标 \typeout 进 log，
+% Python/人工读 log 判定 [xscale=-1, rotate=θ] 的合成顺序 → 写死进 validator 的位姿公式。
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\begin{document}
+\begin{circuitikz}
+\makeatletter
+\def\logank#1#2{\pgfpointanchor{#1}{#2}\typeout{ANK #1 [#2] \the\pgf@x\space\the\pgf@y}}
+\node[npn] (qa) at (0,0) {};
+\node[npn, rotate=90] (qb) at (6,0) {};
+\node[npn, xscale=-1] (qc) at (12,0) {};
+\node[npn, xscale=-1, rotate=90] (qd) at (18,0) {};
+\node[npn, rotate=90, xscale=-1] (qe) at (24,0) {};
+\logank{qa}{center}\logank{qa}{B}\logank{qa}{C}\logank{qa}{E}
+\logank{qb}{center}\logank{qb}{B}\logank{qb}{C}\logank{qb}{E}
+\logank{qc}{center}\logank{qc}{B}\logank{qc}{C}\logank{qc}{E}
+\logank{qd}{center}\logank{qd}{B}\logank{qd}{C}\logank{qd}{E}
+\logank{qe}{center}\logank{qe}{B}\logank{qe}{C}\logank{qe}{E}
+% 每个变体下方标注，PNG 供目视旁证
+\node[font=\ttfamily\tiny] at (0,-1.5)  {plain};
+\node[font=\ttfamily\tiny] at (6,-1.5)  {rotate=90};
+\node[font=\ttfamily\tiny] at (12,-1.5) {xscale=-1};
+\node[font=\ttfamily\tiny] at (18,-1.5) {xscale=-1,rotate=90};
+\node[font=\ttfamily\tiny] at (24,-1.5) {rotate=90,xscale=-1};
+\end{circuitikz}
+\end{document}

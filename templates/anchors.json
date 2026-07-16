@@ -1,0 +1,349 @@
+{
+  "_meta": {
+    "bbox": "[[xmin,ymin],[xmax,ymax]] 相对 at，未变换",
+    "circuitikz": "1.8.5 (2026/02/04)",
+    "generated_by": "scripts/gen_anchor_table.py",
+    "pin_formula": "pin = at + M^mirror * R(rotate) * offset (mirror 先作用于已旋转坐标，与 [xscale=-1, rotate=t] 实测一致)",
+    "unit": "cm (=1 网格单位)"
+  },
+  "types": {
+    "nmos": {
+      "bbox": [
+        [
+          -0.7,
+          -0.55
+        ],
+        [
+          0.0,
+          0.55
+        ]
+      ],
+      "node": "nmos",
+      "pins": {
+        "D": {
+          "anchor": "D",
+          "offset": [
+            0.0,
+            0.55
+          ]
+        },
+        "G": {
+          "anchor": "G",
+          "offset": [
+            -0.7,
+            0.0
+          ]
+        },
+        "S": {
+          "anchor": "S",
+          "offset": [
+            0.0,
+            -0.55
+          ]
+        }
+      }
+    },
+    "npn": {
+      "bbox": [
+        [
+          -0.6,
+          -0.55
+        ],
+        [
+          0.0,
+          0.55
+        ]
+      ],
+      "node": "npn",
+      "pins": {
+        "B": {
+          "anchor": "B",
+          "offset": [
+            -0.6,
+            0.0
+          ]
+        },
+        "C": {
+          "anchor": "C",
+          "offset": [
+            0.0,
+            0.55
+          ]
+        },
+        "E": {
+          "anchor": "E",
+          "offset": [
+            0.0,
+            -0.55
+          ]
+        }
+      }
+    },
+    "opamp": {
+      "bbox": [
+        [
+          -0.85,
+          -0.7
+        ],
+        [
+          0.85,
+          0.7
+        ]
+      ],
+      "node": "op amp",
+      "pins": {
+        "inn": {
+          "anchor": "-",
+          "offset": [
+            -0.85,
+            0.35
+          ]
+        },
+        "inp": {
+          "anchor": "+",
+          "offset": [
+            -0.85,
+            -0.35
+          ]
+        },
+        "out": {
+          "anchor": "out",
+          "offset": [
+            0.85,
+            0.0
+          ]
+        }
+      }
+    },
+    "opamp|noinv_up": {
+      "bbox": [
+        [
+          -0.85,
+          -0.7
+        ],
+        [
+          0.85,
+          0.7
+        ]
+      ],
+      "node": "op amp, noinv input up",
+      "pins": {
+        "inn": {
+          "anchor": "-",
+          "offset": [
+            -0.85,
+            -0.35
+          ]
+        },
+        "inp": {
+          "anchor": "+",
+          "offset": [
+            -0.85,
+            0.35
+          ]
+        },
+        "out": {
+          "anchor": "out",
+          "offset": [
+            0.85,
+            0.0
+          ]
+        }
+      }
+    },
+    "pmos": {
+      "bbox": [
+        [
+          -0.7,
+          -0.55
+        ],
+        [
+          0.0,
+          0.55
+        ]
+      ],
+      "node": "pmos",
+      "pins": {
+        "D": {
+          "anchor": "D",
+          "offset": [
+            0.0,
+            -0.55
+          ]
+        },
+        "G": {
+          "anchor": "G",
+          "offset": [
+            -0.7,
+            0.0
+          ]
+        },
+        "S": {
+          "anchor": "S",
+          "offset": [
+            0.0,
+            0.55
+          ]
+        }
+      }
+    },
+    "pnp": {
+      "bbox": [
+        [
+          -0.6,
+          -0.55
+        ],
+        [
+          0.0,
+          0.55
+        ]
+      ],
+      "node": "pnp",
+      "pins": {
+        "B": {
+          "anchor": "B",
+          "offset": [
+            -0.6,
+            0.0
+          ]
+        },
+        "C": {
+          "anchor": "C",
+          "offset": [
+            0.0,
+            -0.55
+          ]
+        },
+        "E": {
+          "anchor": "E",
+          "offset": [
+            0.0,
+            0.55
+          ]
+        }
+      }
+    },
+    "spdt": {
+      "bbox": [
+        [
+          -0.425,
+          -0.225
+        ],
+        [
+          0.425,
+          0.225
+        ]
+      ],
+      "node": "spdt",
+      "pins": {
+        "in": {
+          "anchor": "in",
+          "offset": [
+            -0.425,
+            0.0
+          ]
+        },
+        "out1": {
+          "anchor": "out 1",
+          "offset": [
+            0.425,
+            0.225
+          ]
+        },
+        "out2": {
+          "anchor": "out 2",
+          "offset": [
+            0.425,
+            -0.225
+          ]
+        }
+      }
+    },
+    "transformer": {
+      "bbox": [
+        [
+          -0.75,
+          -0.75
+        ],
+        [
+          0.75,
+          0.75
+        ]
+      ],
+      "node": "transformer",
+      "pins": {
+        "A1": {
+          "anchor": "A1",
+          "offset": [
+            -0.75,
+            0.75
+          ]
+        },
+        "A2": {
+          "anchor": "A2",
+          "offset": [
+            -0.75,
+            -0.75
+          ]
+        },
+        "B1": {
+          "anchor": "B1",
+          "offset": [
+            0.75,
+            0.75
+          ]
+        },
+        "B2": {
+          "anchor": "B2",
+          "offset": [
+            0.75,
+            -0.75
+          ]
+        }
+      }
+    },
+    "transformer|core": {
+      "bbox": [
+        [
+          -0.75,
+          -0.75
+        ],
+        [
+          0.75,
+          0.75
+        ]
+      ],
+      "node": "transformer core",
+      "pins": {
+        "A1": {
+          "anchor": "A1",
+          "offset": [
+            -0.75,
+            0.75
+          ]
+        },
+        "A2": {
+          "anchor": "A2",
+          "offset": [
+            -0.75,
+            -0.75
+          ]
+        },
+        "B1": {
+          "anchor": "B1",
+          "offset": [
+            0.75,
+            0.75
+          ]
+        },
+        "B2": {
+          "anchor": "B2",
+          "offset": [
+            0.75,
+            -0.75
+          ]
+        }
+      }
+    }
+  }
+}

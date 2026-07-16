@@ -1,0 +1,43 @@
+% probe05: 多端件 node 名与 anchor 名实测（红点=anchor 实际位置）
+\documentclass[margin=5pt]{standalone}
+\usepackage[american]{circuitikz}
+\newcommand{\ank}[2]{\fill[red] (#1) circle (1.5pt) node[red,font=\tiny,anchor=south west] {#2};}
+\begin{document}
+\begin{circuitikz}
+  \node[npn] (q1) at (0,10) {};
+  \node[font=\ttfamily\scriptsize] at (0,8.8) {npn};
+  \ank{q1.B}{B} \ank{q1.C}{C} \ank{q1.E}{E}
+
+  \node[pnp] (q2) at (4,10) {};
+  \node[font=\ttfamily\scriptsize] at (4,8.8) {pnp};
+  \ank{q2.B}{B} \ank{q2.C}{C} \ank{q2.E}{E}
+
+  \node[nmos] (m1) at (8,10) {};
+  \node[font=\ttfamily\scriptsize] at (8,8.8) {nmos};
+  \ank{m1.G}{G} \ank{m1.D}{D} \ank{m1.S}{S}
+
+  \node[pmos] (m2) at (12,10) {};
+  \node[font=\ttfamily\scriptsize] at (12,8.8) {pmos};
+  \ank{m2.G}{G} \ank{m2.D}{D} \ank{m2.S}{S}
+
+  \node[op amp] (oa1) at (2,6) {};
+  \node[font=\ttfamily\scriptsize] at (2,4.6) {op amp};
+  \ank{oa1.+}{+} \ank{oa1.-}{-} \ank{oa1.out}{out}
+
+  \node[op amp, noinv input up] (oa2) at (8,6) {};
+  \node[font=\ttfamily\scriptsize] at (8,4.6) {op amp noinv input up};
+  \ank{oa2.+}{+} \ank{oa2.-}{-} \ank{oa2.out}{out}
+
+  \node[transformer] (tr1) at (2,1) {};
+  \node[font=\ttfamily\scriptsize] at (2,-0.9) {transformer};
+  \ank{tr1.A1}{A1} \ank{tr1.A2}{A2} \ank{tr1.B1}{B1} \ank{tr1.B2}{B2}
+
+  \node[transformer core] (tr2) at (8,1) {};
+  \node[font=\ttfamily\scriptsize] at (8,-0.9) {transformer core};
+  \ank{tr2.A1}{A1} \ank{tr2.A2}{A2} \ank{tr2.B1}{B1} \ank{tr2.B2}{B2}
+
+  \node[spdt] (sw1) at (13,1) {};
+  \node[font=\ttfamily\scriptsize] at (13,-0.9) {spdt};
+  \ank{sw1.in}{in} \ank{sw1.out 1}{out 1} \ank{sw1.out 2}{out 2}
+\end{circuitikz}
+\end{document}

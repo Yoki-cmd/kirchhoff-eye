@@ -1,0 +1,365 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kirchhoff-ir-1.0.schema.json",
+  "title": "kirchhoff-ir/1.0",
+  "description": "Kirchhoff-eye 电路图 IR：JSON 网表+几何，唯一真相源。结构由本 schema 把关(E001)，语义规则见 references/ir-schema.md 与 validate_ir.py(E002+)。",
+  "type": "object",
+  "required": ["version", "meta", "style", "components", "wires", "junctions", "crossings", "terminals", "texts", "regions", "unknowns"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": "kirchhoff-ir/1.0" },
+    "meta": {
+      "type": "object",
+      "required": ["source_image", "title", "grid", "canvas"],
+      "additionalProperties": false,
+      "properties": {
+        "source_image": { "type": "string" },
+        "title": { "type": "string" },
+        "grid": {
+          "type": "object",
+          "required": ["unit_cm", "snap"],
+          "additionalProperties": false,
+          "properties": {
+            "unit_cm": { "const": 1.0 },
+            "snap": { "const": 0.5 }
+          }
+        },
+        "canvas": {
+          "type": "object",
+          "required": ["w", "h"],
+          "additionalProperties": false,
+          "properties": {
+            "w": { "type": "number", "minimum": 1 },
+            "h": { "type": "number", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "style": {
+      "type": "object",
+      "required": ["flavor"],
+      "additionalProperties": false,
+      "properties": {
+        "flavor": { "enum": ["american", "european"] }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "required": ["orthogonal", "grid_snap", "grid_step"],
+      "additionalProperties": false,
+      "properties": {
+        "orthogonal": { "const": "strict" },
+        "grid_snap": { "enum": ["strict", "warn", "off"] },
+        "grid_step": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "at"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "$ref": "#/definitions/netName" },
+          "at": { "$ref": "#/definitions/point2" }
+        }
+      }
+    },
+    "nets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "$ref": "#/definitions/netName" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "arrows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["at", "dir"],
+        "additionalProperties": false,
+        "properties": {
+          "at": { "$ref": "#/definitions/point2" },
+          "dir": { "$ref": "#/definitions/rotate" },
+          "label": { "type": "string" },
+          "label_side": { "$ref": "#/definitions/side" }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/twoTerminal" },
+          { "$ref": "#/definitions/multiTerminal" },
+          { "$ref": "#/definitions/singleTerminal" }
+        ]
+      }
+    },
+    "wires": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "points"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/definitions/id" },
+          "points": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": ["xy"],
+                  "additionalProperties": false,
+                  "properties": { "xy": { "$ref": "#/definitions/point2" } }
+                },
+                {
+                  "type": "object",
+                  "required": ["pin"],
+                  "additionalProperties": false,
+                  "properties": { "pin": { "$ref": "#/definitions/pinRef" } }
+                },
+                {
+                  "type": "object",
+                  "required": ["node"],
+                  "additionalProperties": false,
+                  "properties": { "node": { "$ref": "#/definitions/netName" } }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "junctions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["at"],
+        "additionalProperties": false,
+        "properties": { "at": { "$ref": "#/definitions/point2" } }
+      }
+    },
+    "crossings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["at", "style"],
+        "additionalProperties": false,
+        "properties": {
+          "at": { "$ref": "#/definitions/point2" },
+          "style": { "enum": ["plain", "jump"] }
+        }
+      }
+    },
+    "terminals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["at", "style"],
+        "additionalProperties": false,
+        "properties": {
+          "at": { "$ref": "#/definitions/point2" },
+          "style": { "enum": ["ocirc", "circ"] },
+          "label": { "type": "string" },
+          "label_side": { "$ref": "#/definitions/side" }
+        }
+      }
+    },
+    "texts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["content", "at", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "content": { "type": "string" },
+          "at": { "$ref": "#/definitions/point2" },
+          "anchor": { "type": "string" },
+          "kind": { "enum": ["annotation", "port_label", "net_label"] }
+        }
+      }
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "component_ids"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "component_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/definitions/id" }
+          }
+        }
+      }
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "at", "size", "pin_count", "pins", "appearance"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^UNK[0-9]+$" },
+          "at": { "$ref": "#/definitions/point2" },
+          "size": { "$ref": "#/definitions/point2" },
+          "rect_px": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": { "type": "number" }
+          },
+          "pin_count": { "type": "integer", "minimum": 0 },
+          "pins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "net"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string", "pattern": "^[A-Za-z0-9]+$" },
+                "net": { "$ref": "#/definitions/netName" },
+                "at": { "$ref": "#/definitions/point2" }
+              }
+            }
+          },
+          "appearance": { "type": "string" },
+          "guess": { "type": "string" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "id": { "type": "string", "pattern": "^[A-Z]{1,3}[0-9]+$" },
+    "netName": { "type": "string", "pattern": "^(N_[A-Za-z0-9_]+|GND|VCC|VEE)$" },
+    "point2": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "number" }
+    },
+    "side": { "enum": ["above", "below", "left", "right"] },
+    "pinRef": { "type": "string", "pattern": "^[A-Z]{1,3}[0-9]+\\.[A-Za-z0-9]+$" },
+    "rotate": { "enum": [0, 90, 180, 270] },
+    "twoTerminal": {
+      "type": "object",
+      "required": ["id", "type", "from", "to", "pins"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "type": { "type": "string" },
+        "from": { "$ref": "#/definitions/point2" },
+        "to": { "$ref": "#/definitions/point2" },
+        "pins": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": [
+            {
+              "type": "object",
+              "required": ["name", "net"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "const": "1" },
+                "net": { "$ref": "#/definitions/netName" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["name", "net"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "const": "2" },
+                "net": { "$ref": "#/definitions/netName" }
+              }
+            }
+          ]
+        },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" },
+        "value": { "type": "string" },
+        "label_side": { "$ref": "#/definitions/side" },
+        "value_side": { "$ref": "#/definitions/side" },
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 2.0, "multipleOf": 0.25 },
+        "label_gap": { "type": "number", "minimum": 0, "maximum": 2.0 },
+        "value_gap": { "type": "number", "minimum": 0, "maximum": 2.0 },
+        "flags": {
+          "type": "array",
+          "items": { "enum": ["allow_diagonal"] }
+        }
+      }
+    },
+    "multiTerminal": {
+      "type": "object",
+      "required": ["id", "type", "at", "rotate", "mirror", "pins"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "type": { "type": "string" },
+        "at": { "$ref": "#/definitions/point2" },
+        "rotate": { "$ref": "#/definitions/rotate" },
+        "mirror": { "type": "boolean" },
+        "variant": { "type": "string" },
+        "pins": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": ["name", "net"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "pattern": "^[A-Za-z0-9]+$" },
+              "net": { "$ref": "#/definitions/netName" },
+              "at": { "$ref": "#/definitions/point2" }
+            }
+          }
+        },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" },
+        "label_side": { "$ref": "#/definitions/side" },
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 2.0, "multipleOf": 0.25 },
+        "label_gap": { "type": "number", "minimum": 0, "maximum": 2.0 }
+      }
+    },
+    "singleTerminal": {
+      "type": "object",
+      "required": ["id", "type", "at", "pins"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "type": { "type": "string" },
+        "at": { "$ref": "#/definitions/point2" },
+        "pins": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "net"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "const": "p" },
+              "net": { "$ref": "#/definitions/netName" }
+            }
+          }
+        },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" },
+        "label_side": { "$ref": "#/definitions/side" },
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 2.0, "multipleOf": 0.25 },
+        "label_gap": { "type": "number", "minimum": 0, "maximum": 2.0 }
+      }
+    }
+  }
+}
