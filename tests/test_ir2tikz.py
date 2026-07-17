@@ -179,6 +179,76 @@ def test_cjk_texts_add_ctex(tmp_path, golden_a):
     assert rc == 0 and "\\usepackage{ctex}" in text
 
 
+def test_cjk_text_compiles_with_lualatex(tmp_path, golden_a):
+    golden_a["texts"].append(
+        {"content": "输出端口", "at": [5.5, 3.4], "kind": "annotation"})
+    rc, output, _text = run_ir2tikz(tmp_path, golden_a)
+    assert rc == 0
+
+    proc = subprocess.run(
+        ["lualatex", "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", output.name],
+        cwd=tmp_path,
+        capture_output=True,
+        timeout=120,
+    )
+
+    assert proc.returncode == 0, proc.stdout.decode("utf-8", "replace")[-1500:]
+
+
+@pytest.mark.parametrize("payload", [
+    r"\typeout{KIRCHHOFF_IR_TEX_INJECTION}",
+    r"\input{secrets.txt}",
+    r"\write18{whoami}",
+    "trailing\\",
+    "unbalanced}",
+    "escape] ; \\draw (0,0)",
+    "raw,comma",
+    "line\nbreak",
+])
+def test_untrusted_ir_text_rejects_unsafe_tex_commands(tmp_path, golden_a, payload):
+    golden_a["components"][1]["label"] = payload
+
+    rc, _out, _text = run_ir2tikz(tmp_path, golden_a)
+
+    assert rc == 2
+
+
+def test_metadata_comments_cannot_escape_to_tex_body(tmp_path, golden_a):
+    golden_a["meta"]["title"] = "safe\n\\typeout{META_INJECTION}"
+    golden_a["meta"]["source_image"] = "source^^J\\typeout{SOURCE_INJECTION}"
+    golden_a["regions"][0]["name"] = "region\r\\typeout{REGION_INJECTION}"
+
+    rc, output, text = run_ir2tikz(tmp_path, golden_a)
+
+    assert rc == 0
+    assert "\n\\typeout" not in text
+    proc = subprocess.run(
+        ["pdflatex", "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", output.name],
+        cwd=tmp_path,
+        capture_output=True,
+        timeout=120,
+    )
+    log = output.with_suffix(".log").read_text(encoding="utf-8", errors="replace")
+    assert proc.returncode == 0, proc.stdout.decode("utf-8", "replace")[-1500:]
+    assert "META_INJECTION" not in log
+    assert "SOURCE_INJECTION" not in log
+    assert "REGION_INJECTION" not in log
+
+
+def test_safe_math_and_cjk_text_remain_supported(tmp_path, golden_a):
+    golden_a["components"][1]["label"] = "R_1"
+    golden_a["components"][1]["value"] = r"1\mathrm{k}\Omega"
+    golden_a["texts"].append(
+        {"content": "输出端口", "at": [5.5, 3.4], "kind": "annotation"})
+
+    rc, _out, text = run_ir2tikz(tmp_path, golden_a)
+
+    assert rc == 0
+    assert "$R_1$" in text
+    assert r"1\mathrm{k}\Omega" in text
+    assert "输出端口" in text
+
+
 def test_european_flavor(tmp_path, golden_a):
     golden_a["style"]["flavor"] = "european"
     rc, _o, text = run_ir2tikz(tmp_path, golden_a)

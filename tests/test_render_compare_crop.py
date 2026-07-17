@@ -90,6 +90,26 @@ def test_render_timeout(tmp_path, monkeypatch):
                         "--timeout", "1"]) == 3
 
 
+@pytest.mark.parametrize("engine", ["pdflatex", "lualatex"])
+def test_latex_runs_with_shell_escape_disabled(tmp_path, monkeypatch, engine):
+    tex = tmp_path / "t.tex"
+    tex.write_text(TINY_TEX, encoding="utf-8")
+    seen = {}
+
+    class Result:
+        returncode = 0
+
+    def capture(cmd, **_kwargs):
+        seen["cmd"] = cmd
+        return Result()
+
+    monkeypatch.setattr(render.subprocess, "run", capture)
+
+    assert render.run_latex(engine, str(tex), 30) == 0
+    assert seen["cmd"].count("-no-shell-escape") == 1
+    assert "-shell-escape" not in seen["cmd"]
+
+
 def test_summarize_log():
     log = "junk\n! Undefined control sequence.\nl.3 \\undefinedmacro\nmore\n"
     lines = render.summarize_log(log)

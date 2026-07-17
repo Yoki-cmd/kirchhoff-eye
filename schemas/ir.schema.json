@@ -91,6 +91,20 @@
         }
       }
     },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/componentTextAnnotation" },
+          { "$ref": "#/definitions/portLabelAnnotation" },
+          { "$ref": "#/definitions/railLabelAnnotation" },
+          { "$ref": "#/definitions/currentDirectionAnnotation" },
+          { "$ref": "#/definitions/voltageMeasurementAnnotation" },
+          { "$ref": "#/definitions/nodePolarityAnnotation" },
+          { "$ref": "#/definitions/freeTextAnnotation" }
+        ]
+      }
+    },
     "components": {
       "type": "array",
       "items": {
@@ -182,7 +196,7 @@
         "properties": {
           "content": { "type": "string" },
           "at": { "$ref": "#/definitions/point2" },
-          "anchor": { "type": "string" },
+          "anchor": { "enum": ["center", "north", "south", "east", "west", "north east", "north west", "south east", "south west", "base", "base east", "base west", "mid", "mid east", "mid west"] },
           "kind": { "enum": ["annotation", "port_label", "net_label"] }
         }
       }
@@ -241,6 +255,7 @@
   },
   "definitions": {
     "id": { "type": "string", "pattern": "^[A-Z]{1,3}[0-9]+$" },
+    "annotationId": { "type": "string", "pattern": "^A[0-9]+$" },
     "netName": { "type": "string", "pattern": "^(N_[A-Za-z0-9_]+|GND|VCC|VEE)$" },
     "point2": {
       "type": "array",
@@ -251,6 +266,166 @@
     "side": { "enum": ["above", "below", "left", "right"] },
     "pinRef": { "type": "string", "pattern": "^[A-Z]{1,3}[0-9]+\\.[A-Za-z0-9]+$" },
     "rotate": { "enum": [0, 90, 180, 270] },
+    "annotationTarget": {
+      "oneOf": [
+        { "$ref": "#/definitions/componentTarget" },
+        { "$ref": "#/definitions/wireTarget" },
+        { "$ref": "#/definitions/netTarget" },
+        { "$ref": "#/definitions/nodeTarget" }
+      ]
+    },
+    "componentTarget": {
+      "type": "object",
+      "required": ["component"],
+      "additionalProperties": false,
+      "properties": { "component": { "$ref": "#/definitions/id" } }
+    },
+    "wireTarget": {
+      "type": "object",
+      "required": ["wire"],
+      "additionalProperties": false,
+      "properties": { "wire": { "$ref": "#/definitions/id" } }
+    },
+    "netTarget": {
+      "type": "object",
+      "required": ["net"],
+      "additionalProperties": false,
+      "properties": { "net": { "$ref": "#/definitions/netName" } }
+    },
+    "nodeTarget": {
+      "type": "object",
+      "required": ["node"],
+      "additionalProperties": false,
+      "properties": { "node": { "$ref": "#/definitions/netName" } }
+    },
+    "netOrNodeTarget": {
+      "oneOf": [
+        { "$ref": "#/definitions/netTarget" },
+        { "$ref": "#/definitions/nodeTarget" }
+      ]
+    },
+    "portTarget": {
+      "oneOf": [
+        { "$ref": "#/definitions/wireTarget" },
+        { "$ref": "#/definitions/netTarget" },
+        { "$ref": "#/definitions/nodeTarget" }
+      ]
+    },
+    "currentTarget": {
+      "oneOf": [
+        { "$ref": "#/definitions/componentTarget" },
+        { "$ref": "#/definitions/wireTarget" }
+      ]
+    },
+    "measurementRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["net", "marker_at"],
+          "additionalProperties": false,
+          "properties": {
+            "net": { "$ref": "#/definitions/netName" },
+            "marker_at": { "$ref": "#/definitions/point2" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["node", "marker_at"],
+          "additionalProperties": false,
+          "properties": {
+            "node": { "$ref": "#/definitions/netName" },
+            "marker_at": { "$ref": "#/definitions/point2" }
+          }
+        }
+      ]
+    },
+    "componentTextAnnotation": {
+      "type": "object",
+      "required": ["id", "kind", "target", "label_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/annotationId" },
+        "kind": { "enum": ["component_id", "component_value"] },
+        "target": { "$ref": "#/definitions/componentTarget" },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" }
+      }
+    },
+    "portLabelAnnotation": {
+      "type": "object",
+      "required": ["id", "kind", "target", "label", "label_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/annotationId" },
+        "kind": { "const": "port_label" },
+        "target": { "$ref": "#/definitions/portTarget" },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" }
+      }
+    },
+    "railLabelAnnotation": {
+      "type": "object",
+      "required": ["id", "kind", "target", "label", "label_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/annotationId" },
+        "kind": { "const": "rail_label" },
+        "target": { "$ref": "#/definitions/netOrNodeTarget" },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" }
+      }
+    },
+    "currentDirectionAnnotation": {
+      "type": "object",
+      "required": ["id", "kind", "target", "direction", "marker_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/annotationId" },
+        "kind": { "const": "current_direction" },
+        "target": { "$ref": "#/definitions/currentTarget" },
+        "direction": { "enum": ["up", "down", "left", "right"] },
+        "marker_at": { "$ref": "#/definitions/point2" },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" }
+      }
+    },
+    "voltageMeasurementAnnotation": {
+      "type": "object",
+      "required": ["id", "kind", "label", "positive_ref", "negative_ref", "label_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/annotationId" },
+        "kind": { "const": "voltage_measurement" },
+        "label": { "type": "string" },
+        "positive_ref": { "$ref": "#/definitions/measurementRef" },
+        "negative_ref": { "$ref": "#/definitions/measurementRef" },
+        "label_at": { "$ref": "#/definitions/point2" }
+      }
+    },
+    "nodePolarityAnnotation": {
+      "type": "object",
+      "required": ["id", "kind", "target", "polarity", "marker_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/annotationId" },
+        "kind": { "const": "node_polarity" },
+        "target": { "$ref": "#/definitions/netOrNodeTarget" },
+        "polarity": { "enum": ["positive", "negative"] },
+        "marker_at": { "$ref": "#/definitions/point2" },
+        "label": { "type": "string" }
+      }
+    },
+    "freeTextAnnotation": {
+      "type": "object",
+      "required": ["id", "kind", "label", "label_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/definitions/annotationId" },
+        "kind": { "const": "free_text" },
+        "label": { "type": "string" },
+        "label_at": { "$ref": "#/definitions/point2" }
+      }
+    },
     "twoTerminal": {
       "type": "object",
       "required": ["id", "type", "from", "to", "pins"],

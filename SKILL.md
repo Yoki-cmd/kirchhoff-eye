@@ -1,38 +1,57 @@
 ---
 name: kirchhoff-eye
-description: 电路图图片 → circuitikz 代码 + 渲染图（布局保真，生成-验证回路）。触发场景：用户说"电路图转 TikZ / 转 circuitikz / 识别这张电路图 / 电路图图片转代码 / 把这张图画成 LaTeX 电路"，或给出电子电路图图片（jpg/png）要求转成可编译代码——凡"电路图图片 → LaTeX/TikZ 代码"任务，即使用户没点名本 skill 也应使用。v1 仅支持印刷/软件导出图；手绘/拍照图与电气控制图（继电器-接触器）是 v2，遇到时明确告知并按 UNKNOWN 协议兜底。
+description: "Use when redrawing a printed or software-exported circuit diagram as topology-aware JSON IR and deterministic circuitikz. The public workflow is AI-assisted and human-in-the-loop: inspect the image, author/review canonical IR, then validate, serialize, render, compare, and iterate. Do not claim autonomous arbitrary image-to-IR recognition."
 metadata:
-  version: 0.1.0
+  version: 0.2.0
 ---
 
-# Kirchhoff-eye：电路图图片 → circuitikz
+# Kirchhoff-eye：AI 辅助电路图重画 → circuitikz
 
 **心法**：电路图 = 带几何布局的图（graph）。你的任务不是"画一张像的图"，而是从有损渲染
 反解出"网表+布局"（ir.json，唯一真相源），再机械重表达。全链路只有两处需要动脑：
 **①看图填 IR（§3–§4）②看对比图出差异清单（§5）**——其余全部交给确定性工具。
-质量由回路收敛保证，不靠一次看对；**布局必须和原图一致**（相对方位/走线转角/标签位置），
-拓扑等效但布局不同 = 不合格。
+质量由回路收敛保证，不靠一次看对。这里的布局保真是**语义/构图保真**：保留相对方位、
+分组、母线、主路由、重要转角与标签归属；允许为清晰度调整尺寸、间距、画布和次要对齐。
+精确像素重合、线长和符号尺寸不是默认验收目标，除非用户明确要求摹图。
+
+**能力边界**：公开仓库提供确定性的 IR 校验、序列化、渲染、对比和布局检查后端；
+图片理解仍由 AI/人工审阅完成，不得宣称已提供任意电路图的全自动 image-to-IR 识别器。
 
 规范文件（先读再干活）：
 - `references/ir-schema.md` — IR 语义正本 + 字段检查清单（§10）
 - `references/circuitikz-style.md` — 序列化规范（工具已实现，人只需懂约定）
+- `references/perception-roadmap.md` — 未来独立图像感知的窄范围、证据架构、模型使用和状态边界
 - `templates/anchors.json` — 多端件引脚偏移实测表
 - `SKILL-ir-fix.md` — **线条布局铁律**（斜线/折返/中点/级联，6 条铁律 + 验证五步法）
-- `references/perception-pipeline.md` — 复杂图的分阶段图像感知 MVP、证据 overlays 与当前边界
+
 
 ## 1. 工具 CLI（确定性，全在 scripts/）
 
-统一用锚定解释器运行（Windows 本机）：`E:\Miniconda\python.exe`
+统一使用项目虚拟环境中的 Python 3.9+。首次使用先安装：
+
+```bash
+python -m pip install -e ".[dev]"
+kirchhoff-eye --help
+```
+
+v0.2 已提供稳定的顶层 CLI/版本入口；现有 `scripts/` 命令继续作为向后兼容入口，后续生产
+子命令逐步迁移到 `kirchhoff-eye`。若当前解释器缺少依赖，应切换虚拟环境，不把个人机器路径
+写入仓库。
 
 | 命令 | 作用 |
 |---|---|
+| `kirchhoff-eye build ir.json [--source source.png] --out out/job [--dpi 300]` | 生产编排：校验→序列化→正常/调试渲染→布局报告→对比图→交付报告 |
+| `kirchhoff-eye labels apply ir.json positions.json -o labelled.ir.json` | 批量应用人工确认的 `元件ID -> [x,y]` 编号坐标；`null` 保持当前位置 |
+| `kirchhoff-eye doctor [--json]` | 检查 Python、打包资源、TeX 引擎、`pdftoppm`、真实 circuitikz 编译和可写输出目录 |
 | `python scripts/validate_ir.py ir.json [--phase skeleton\|geometry\|full] [--json]` | 校验（0 干净/1 仅警告/2 有错/3 环境错） |
 | `python scripts/ir2tikz.py ir.json -o circuit.tex` | IR→tex（内嵌 full 校验门禁；每次自动另出 `circuit.debug.tex` 网格+ID 版） |
 | `python scripts/render.py circuit.tex -o circuit.png [--dpi 300]` | tex→png；若同目录存在 `circuit.debug.tex`，自动同时生成 `circuit.debug.png` |
 | `python scripts/compare.py 原图.png 渲染.png -o cmp.png [--mode side\|overlay\|both]` | 并排对比图 |
 | `python scripts/crop.py 图.png -o 局部.png --rect x0,y0,x1,y1 [--scale 2] [--ruler]` | 像素放大取证 |
 | `python scripts/ir_fix_and_render.py circuit.tex --layout-check [--json]` | **布局铁律检测**（斜线/折返/中点/引脚，详见 SKILL-ir-fix.md） |
-| `python scripts/perception/run_pipeline.py image.png -o out/job --truth truth.json --annotations annotations.json` | 复杂图 truth-guided 感知前端：线段/junction/pin attachment overlays |
+| `python scripts/score_ir.py truth.json candidate.json --json` | 语义重画评分：拓扑/方向硬门禁 + 平移缩放不变的构图软评分 |
+| `python scripts/generate_synthetic_fixture.py --out tests/fixtures --dpi 72` | 从公开 IR 确定性生成 20 组 synthetic IR/图片基准（不使用私有扫描图） |
+
 
 **失败重试协议**：任何工具 exit 2 → 读报告逐条修 ir.json 后重跑；同一错误码连续 3 次
 不消 → 停下，写入遗留问题交人工。报告里每条 finding 的 `hint` 就是修复指引，照做。
@@ -77,6 +96,8 @@ metadata:
 - **一条干线（母线/地轨）抽头接多个元件引脚时，每个抽头点必须打断成显式顶点**（该点即
   junction）：引脚只在 wire 顶点处连通，压在线段中段=E014 悬空、net 几何分裂（E007）。
 - 图上每段文字三选一归属：元件 label/value（定 side）/ 独立 texts / 端口标号。
+- 电流方向、电压测量、节点极性等物理量优先写 `annotations[]`：语义归属用 `target` 或
+  `positive_ref/negative_ref`，视觉位置用 `marker_at/label_at`；不得从元件类型静默猜物理量。
 - **编号位置默认交给人类定稿**：每次渲染都必须同时生成 `circuit.debug.png`。用户查看网格后给出
   `元件ID -> [x,y]`；把坐标写入该元件的 `label_at`，不要继续让模型反复猜 `label_side/gap`。
   `label_at` 是编号的绝对网格坐标，优先级高于 `label_side/label_gap`。
@@ -110,9 +131,12 @@ python scripts/compare.py source.png circuit.png -o cmp_round<N>.png
 **审读协议**：打开 cmp_round<N>.png，按 region 逐区对照，每区要么列出差异、要么明确
 写"该区无差异"——不许整图扫一眼了事。可疑处用 crop.py 对两侧同位置取证后再下结论。
 
-**编号坐标反馈协议**：同时把 `circuit.debug.png` 交给用户。用户按网格返回，例如：
+**编号坐标反馈协议**：同时把 `circuit.debug.png` 交给用户。图中的红色十字是元件内部锚点，
+用于区别锚点坐标和文字外框。用户按网格返回，例如：
 `T2(Q2) -> [4.8, 3.4]`。将其写为 `components[Q2].label_at:[4.8,3.4]` 后重出图。
 编号位置不再要求机器自动验收；机器只保证坐标被精确序列化、debug 网格图始终生成。
+多个坐标优先写入 positions JSON 并用 `kirchhoff-eye labels apply` 批量应用；未知 ID 必须报错，
+`null` 表示保持当前自动或人工位置，重复应用必须产出逐字节一致的 IR。
 
 **布局铁律检查**（每轮必须执行，详见 `SKILL-ir-fix.md`）：
 ```

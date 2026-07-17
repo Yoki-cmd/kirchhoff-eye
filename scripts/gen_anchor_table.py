@@ -85,7 +85,7 @@ def build_tex():
 def run_pdflatex(build_dir, tex_name):
     try:
         proc = subprocess.run(
-            ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", tex_name],
+            ["pdflatex", "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error", tex_name],
             cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             timeout=120)
     except FileNotFoundError:

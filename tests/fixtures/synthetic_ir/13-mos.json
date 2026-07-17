@@ -1,0 +1,220 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "synthetic_images/13-mos.png",
+    "title": "Synthetic nmos stage",
+    "grid": {
+      "unit_cm": 1.0,
+      "snap": 0.5
+    },
+    "canvas": {
+      "w": 11,
+      "h": 9
+    }
+  },
+  "style": {
+    "flavor": "american"
+  },
+  "routing": {
+    "orthogonal": "strict",
+    "grid_snap": "off",
+    "grid_step": 0.5
+  },
+  "nets": [
+    {
+      "name": "N_SRC"
+    },
+    {
+      "name": "N_IN"
+    },
+    {
+      "name": "N_OUT"
+    },
+    {
+      "name": "VCC"
+    },
+    {
+      "name": "GND"
+    }
+  ],
+  "components": [
+    {
+      "id": "M1",
+      "type": "nmos",
+      "at": [
+        5,
+        4.5
+      ],
+      "rotate": 0,
+      "mirror": false,
+      "pins": [
+        {
+          "name": "D",
+          "net": "N_OUT"
+        },
+        {
+          "name": "G",
+          "net": "N_IN"
+        },
+        {
+          "name": "S",
+          "net": "GND"
+        }
+      ],
+      "label": "M_1"
+    },
+    {
+      "id": "R1",
+      "type": "resistor",
+      "from": [
+        2,
+        4.5
+      ],
+      "to": [
+        4,
+        4.5
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_SRC"
+        },
+        {
+          "name": "2",
+          "net": "N_IN"
+        }
+      ],
+      "label": "R_G",
+      "value": "10\\mathrm{k}\\Omega"
+    },
+    {
+      "id": "R2",
+      "type": "resistor",
+      "from": [
+        5,
+        7.5
+      ],
+      "to": [
+        5,
+        6
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "VCC"
+        },
+        {
+          "name": "2",
+          "net": "N_OUT"
+        }
+      ],
+      "label": "R_D",
+      "value": "2\\mathrm{k}\\Omega"
+    },
+    {
+      "id": "VCC1",
+      "type": "vcc",
+      "at": [
+        5,
+        7.5
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "VCC"
+        }
+      ]
+    },
+    {
+      "id": "GND1",
+      "type": "ground",
+      "at": [
+        5,
+        2.5
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "GND"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "points": [
+        {
+          "xy": [
+            1,
+            4.5
+          ]
+        },
+        {
+          "pin": "R1.1"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "points": [
+        {
+          "pin": "R1.2"
+        },
+        {
+          "pin": "M1.G"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "points": [
+        {
+          "pin": "M1.D"
+        },
+        {
+          "pin": "R2.2"
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "points": [
+        {
+          "pin": "M1.S"
+        },
+        {
+          "pin": "GND1.p"
+        }
+      ]
+    }
+  ],
+  "junctions": [],
+  "crossings": [],
+  "terminals": [
+    {
+      "at": [
+        1,
+        4.5
+      ],
+      "style": "ocirc",
+      "label": "in",
+      "label_side": "left"
+    }
+  ],
+  "texts": [],
+  "annotations": [],
+  "regions": [
+    {
+      "name": "stage",
+      "component_ids": [
+        "M1",
+        "R1",
+        "R2",
+        "VCC1",
+        "GND1"
+      ]
+    }
+  ],
+  "unknowns": []
+}

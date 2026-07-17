@@ -28,6 +28,54 @@ def test_golden_b_clean_all_phases(golden_b, vrun):
         assert rc == 0, phase
 
 
+@pytest.mark.parametrize(
+    "section,index,field",
+    [
+        ("components", 1, "label"),
+        ("components", 1, "value"),
+        ("terminals", 0, "label"),
+        ("texts", 0, "content"),
+        ("arrows", 0, "label"),
+        ("annotations", 0, "label"),
+    ],
+)
+def test_e016_rejects_unsafe_tex_in_every_rendered_text_field(
+        golden_a, vrun, section, index, field):
+    golden_a["texts"] = [{"content": "note", "at": [1, 1], "kind": "annotation"}]
+    golden_a["arrows"] = [{"at": [4, 2], "dir": 0, "label": "i_o"}]
+    golden_a["annotations"] = [{
+        "id": "A1", "kind": "free_text", "label": "note", "label_at": [1, 1],
+    }]
+    golden_a[section][index][field] = r"\input{secret}"
+
+    rc, out = vrun(golden_a, phase="skeleton")
+
+    assert rc == 2
+    finding = next(f for f in out["findings"] if f["code"] == "E016")
+    assert finding["path"] == f"/{section}/{index}/{field}"
+
+
+@pytest.mark.parametrize("phase", ["skeleton", "geometry", "full"])
+def test_e016_runs_in_every_validation_phase(golden_a, vrun, phase):
+    golden_a["components"][1]["label"] = r"\typeout{MARK}"
+
+    rc, out = vrun(golden_a, phase=phase)
+
+    assert rc == 2 and "E016" in codes(out)
+
+
+@pytest.mark.parametrize("text", [
+    "R_1", "i_o", "R_{C1}", r"1\mathrm{k}\Omega",
+    r"470\mu\mathrm{F}", r"2\,\Omega", "输出端口",
+])
+def test_e016_allows_documented_safe_math_and_unicode(golden_a, vrun, text):
+    golden_a["components"][1]["label"] = text
+
+    rc, out = vrun(golden_a)
+
+    assert rc == 0 and "E016" not in codes(out)
+
+
 # ---------------------------------------------------------------- E001
 
 def test_e001_unknown_type(golden_b, vrun):

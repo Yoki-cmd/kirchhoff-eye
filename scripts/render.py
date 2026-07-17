@@ -41,7 +41,7 @@ def summarize_log(log_text):
 
 def run_latex(engine, tex_path, timeout):
     workdir = os.path.dirname(os.path.abspath(tex_path)) or "."
-    cmd = [engine, "-interaction=nonstopmode", "-halt-on-error",
+    cmd = [engine, "-no-shell-escape", "-interaction=nonstopmode", "-halt-on-error",
            os.path.basename(tex_path)]
     try:
         proc = subprocess.run(cmd, cwd=workdir, stdout=subprocess.PIPE,

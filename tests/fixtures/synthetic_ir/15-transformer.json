@@ -1,0 +1,275 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "synthetic_images/15-transformer.png",
+    "title": "Synthetic transformer rectifier",
+    "grid": {
+      "unit_cm": 1.0,
+      "snap": 0.5
+    },
+    "canvas": {
+      "w": 12,
+      "h": 9
+    }
+  },
+  "style": {
+    "flavor": "american"
+  },
+  "routing": {
+    "orthogonal": "strict",
+    "grid_snap": "off",
+    "grid_step": 0.5
+  },
+  "nets": [
+    {
+      "name": "N_PRI1"
+    },
+    {
+      "name": "N_PRI2"
+    },
+    {
+      "name": "N_SEC1"
+    },
+    {
+      "name": "N_SEC2"
+    },
+    {
+      "name": "N_OUT"
+    },
+    {
+      "name": "GND"
+    }
+  ],
+  "components": [
+    {
+      "id": "T1",
+      "type": "transformer",
+      "at": [
+        5,
+        5
+      ],
+      "rotate": 0,
+      "mirror": false,
+      "pins": [
+        {
+          "name": "A1",
+          "net": "N_PRI1"
+        },
+        {
+          "name": "A2",
+          "net": "N_PRI2"
+        },
+        {
+          "name": "B1",
+          "net": "N_SEC1"
+        },
+        {
+          "name": "B2",
+          "net": "N_SEC2"
+        }
+      ],
+      "label": "T_1",
+      "variant": "core"
+    },
+    {
+      "id": "D1",
+      "type": "diode",
+      "from": [
+        6.25,
+        5.75
+      ],
+      "to": [
+        8.25,
+        5.75
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_SEC1"
+        },
+        {
+          "name": "2",
+          "net": "N_OUT"
+        }
+      ],
+      "label": "D_1"
+    },
+    {
+      "id": "D2",
+      "type": "diode",
+      "from": [
+        6.25,
+        4.25
+      ],
+      "to": [
+        8.25,
+        4.25
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_SEC2"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "D_2"
+    },
+    {
+      "id": "C1",
+      "type": "polar_capacitor",
+      "from": [
+        9,
+        5.75
+      ],
+      "to": [
+        9,
+        4.25
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_OUT"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "C_1",
+      "value": "220\\mathrm{uF}"
+    },
+    {
+      "id": "GND1",
+      "type": "ground",
+      "at": [
+        9,
+        4.25
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "GND"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "points": [
+        {
+          "xy": [
+            2,
+            5.75
+          ]
+        },
+        {
+          "pin": "T1.A1"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "points": [
+        {
+          "xy": [
+            2,
+            4.25
+          ]
+        },
+        {
+          "pin": "T1.A2"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "points": [
+        {
+          "pin": "T1.B1"
+        },
+        {
+          "pin": "D1.1"
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "points": [
+        {
+          "pin": "T1.B2"
+        },
+        {
+          "pin": "D2.1"
+        }
+      ]
+    },
+    {
+      "id": "W5",
+      "points": [
+        {
+          "pin": "D1.2"
+        },
+        {
+          "pin": "C1.1"
+        }
+      ]
+    },
+    {
+      "id": "W6",
+      "points": [
+        {
+          "pin": "D2.2"
+        },
+        {
+          "pin": "C1.2"
+        }
+      ]
+    }
+  ],
+  "junctions": [],
+  "crossings": [],
+  "terminals": [
+    {
+      "at": [
+        2,
+        5.75
+      ],
+      "style": "ocirc",
+      "label": "pri1",
+      "label_side": "left"
+    },
+    {
+      "at": [
+        2,
+        4.25
+      ],
+      "style": "ocirc",
+      "label": "pri2",
+      "label_side": "left"
+    }
+  ],
+  "texts": [],
+  "annotations": [],
+  "regions": [
+    {
+      "name": "transformer",
+      "component_ids": [
+        "T1"
+      ]
+    },
+    {
+      "name": "rectifier",
+      "component_ids": [
+        "D1",
+        "D2",
+        "C1",
+        "GND1"
+      ]
+    }
+  ],
+  "unknowns": []
+}

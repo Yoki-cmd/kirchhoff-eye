@@ -1,6 +1,5 @@
 {
   "version": "0.1.0",
-  "interpreter": "E:\\Miniconda\\python.exe",
   "max_rounds": 3,
   "render": {
     "dpi": 300,
@@ -23,8 +22,29 @@
   "score_weights": {
     "netlist": { "f1": 0.5, "connectivity": 0.4, "values": 0.1 },
     "layout": { "bearing": 0.4, "rmse": 0.2, "wire_shape": 0.2, "label_side": 0.1, "orientation": 0.1 },
-    "total": { "netlist": 0.6, "layout": 0.4 }
+    "semantic": {
+      "relative_relations": 0.30,
+      "region_grouping": 0.15,
+      "route_shape": 0.30,
+      "annotation_ownership": 0.15,
+      "component_text": 0.10
+    }
   },
+  "score_gates": [
+    "component_set_type",
+    "pin_net_connectivity",
+    "geometric_topology",
+    "candidate_full_validation",
+    "junction_crossing",
+    "orientation_mirror"
+  ],
+  "score_diagnostics": [
+    "absolute_coordinates",
+    "exact_line_lengths",
+    "canvas_proportions",
+    "pixel_overlap",
+    "human_approved_label_coordinates"
+  ],
   "score_match": {
     "align": "translation+uniform_scale",
     "component_match_max_dist": 1.5

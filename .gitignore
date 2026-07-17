@@ -8,6 +8,10 @@ benchmark/acceptance/
 benchmark/samples/
 *.jpg
 *.jpeg
+*.tif
+*.tiff
+*.webp
+*.bmp
 
 # 本地用户坐标调整文件
 component_label_positions.json
@@ -18,6 +22,10 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+.venv/
+build/
+dist/
+*.egg-info/
 
 # LaTeX 中间产物（tests/probes 的 .tex 与最终 .png 入库；pdf/aux/log 一律不入库）
 *.aux

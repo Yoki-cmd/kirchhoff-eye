@@ -1,0 +1,296 @@
+{
+  "version": "kirchhoff-eye-synthetic/1.0",
+  "source_policy": "generated_from_public_ir_only",
+  "cases": [
+    {
+      "id": "01-divider-base",
+      "family": "divider",
+      "image_variant": "base",
+      "coverage": [
+        "resistors_capacitors_sources",
+        "junction_connected"
+      ],
+      "ir": "synthetic_ir/01-divider-base.json",
+      "image": "synthetic_images/01-divider-base.png",
+      "sha256": {
+        "ir": "fd6a53f9bbcd2858f2cfeb029d170de45cbdbca1c9fd5ff7cc5d45b3761864c6",
+        "image_pixels": "31c848bfd1626560d5fc7a10c044abb07cd3f88186a6537de26856ed082fda3a"
+      }
+    },
+    {
+      "id": "02-divider-scale",
+      "family": "divider",
+      "image_variant": "scale",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/02-divider-scale.json",
+      "image": "synthetic_images/02-divider-scale.png",
+      "sha256": {
+        "ir": "c15bc3f72e3086bf4e8cdcb418608235c86395a30223927eab296288df557bd4",
+        "image_pixels": "0a558a95e754761a944202cf96430df65e61a1aab9d6aff4a0f7bdfb5c82580f"
+      }
+    },
+    {
+      "id": "03-divider-jpeg",
+      "family": "divider",
+      "image_variant": "jpeg_compression",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/03-divider-jpeg.json",
+      "image": "synthetic_images/03-divider-jpeg.png",
+      "sha256": {
+        "ir": "9afa828a269d5d85b22ba4cfaa834f2a19714f60888add4e85c4ff36c290b561",
+        "image_pixels": "968a91000801fc0a8f089974dd73ea769d4ce2cb63e3aafb3eddf9d11d0ec369"
+      }
+    },
+    {
+      "id": "04-divider-blur",
+      "family": "divider",
+      "image_variant": "mild_blur",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/04-divider-blur.json",
+      "image": "synthetic_images/04-divider-blur.png",
+      "sha256": {
+        "ir": "b5148b73ea88a2387f0eaea9306079d4e58e5e712d3f7d733420ad9b9e63273c",
+        "image_pixels": "2b50014a6859755f28d9472b2edd75bee22cb7c9802e1b51faa0d9172852eacf"
+      }
+    },
+    {
+      "id": "05-divider-gray",
+      "family": "divider",
+      "image_variant": "grayscale",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/05-divider-gray.json",
+      "image": "synthetic_images/05-divider-gray.png",
+      "sha256": {
+        "ir": "5ebce2420b50cdcaa5f9aa4ef5b7306380e67bdd6880f6a238f93b8273bcb720",
+        "image_pixels": "31c848bfd1626560d5fc7a10c044abb07cd3f88186a6537de26856ed082fda3a"
+      }
+    },
+    {
+      "id": "06-divider-paper",
+      "family": "divider",
+      "image_variant": "paper_tint",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/06-divider-paper.json",
+      "image": "synthetic_images/06-divider-paper.png",
+      "sha256": {
+        "ir": "6e655faebc00b94690db81c4c8fde9cadf733a338e8535040803c6678936e7dd",
+        "image_pixels": "0ce6d9eec6b19534de12928da372d711a9ac932ff6bff620ee97f80847384341"
+      }
+    },
+    {
+      "id": "07-divider-lines",
+      "family": "divider",
+      "image_variant": "line_width",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/07-divider-lines.json",
+      "image": "synthetic_images/07-divider-lines.png",
+      "sha256": {
+        "ir": "c18ec7817ebcb629a34c70a628f45ceefda31414b83cee005b56e205803d99ae",
+        "image_pixels": "1efb4a60e91063743debbe58c65dc231fc1fc42ba09bb7c189f6d03000341c4a"
+      }
+    },
+    {
+      "id": "08-divider-rotate",
+      "family": "divider",
+      "image_variant": "small_rotation",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/08-divider-rotate.json",
+      "image": "synthetic_images/08-divider-rotate.png",
+      "sha256": {
+        "ir": "79850d05da518a9339c8a02e511383647596d92dcd98fd08391034affcb14c0f",
+        "image_pixels": "1e2b256d2733452d9a2493efba62fb84109bc1c3888fa81949a0ff15b7f6d587"
+      }
+    },
+    {
+      "id": "09-divider-label",
+      "family": "divider",
+      "image_variant": "label_displacement",
+      "coverage": [
+        "resistors_capacitors_sources"
+      ],
+      "ir": "synthetic_ir/09-divider-label.json",
+      "image": "synthetic_images/09-divider-label.png",
+      "sha256": {
+        "ir": "58df17d4c6ce6255473093faa87a6fb708fcac07effdd9224164b19d31855a21",
+        "image_pixels": "871993fa263c2308bd1c8fa68ee241b0d7124ce0a244367fbf6cbcd44a1a1144"
+      }
+    },
+    {
+      "id": "10-rectifier",
+      "family": "rectifier",
+      "image_variant": "base",
+      "coverage": [
+        "diodes_polar_capacitors",
+        "crossing_unconnected",
+        "junction_connected"
+      ],
+      "ir": "synthetic_ir/10-rectifier.json",
+      "image": "synthetic_images/10-rectifier.png",
+      "sha256": {
+        "ir": "e49497f7933828d35a9ac7d737afa6a1a551894356a5626dd8a7099cba2669c8",
+        "image_pixels": "78abfcac6bfefae8d49f0375f281bfb3aa2a2121381495f52de872399cf3449c"
+      }
+    },
+    {
+      "id": "11-zener-led",
+      "family": "zener",
+      "image_variant": "jpeg_compression",
+      "coverage": [
+        "diodes_polar_capacitors"
+      ],
+      "ir": "synthetic_ir/11-zener-led.json",
+      "image": "synthetic_images/11-zener-led.png",
+      "sha256": {
+        "ir": "a4c3d3e7679377e36fc77012c47087d7739b8e13538a09d3354f356d9e393f0f",
+        "image_pixels": "5da5c8f945a8eeb98be80106a470c79d3b3e2fe0ff049c26373875c6ab1f41ed"
+      }
+    },
+    {
+      "id": "12-bjt",
+      "family": "bjt",
+      "image_variant": "base",
+      "coverage": [
+        "bjt_mos",
+        "multiple_buses"
+      ],
+      "ir": "synthetic_ir/12-bjt.json",
+      "image": "synthetic_images/12-bjt.png",
+      "sha256": {
+        "ir": "d7c778e2f3c53e4eed84196851c5ca0cec59d5d581e4f1260e10f01c469c8404",
+        "image_pixels": "9b59cd09c7cf05818cbbfad7b69ee251bd3e48cdc1a041875549ca1c846cb585"
+      }
+    },
+    {
+      "id": "13-mos",
+      "family": "mos",
+      "image_variant": "paper_tint",
+      "coverage": [
+        "bjt_mos",
+        "multiple_buses"
+      ],
+      "ir": "synthetic_ir/13-mos.json",
+      "image": "synthetic_images/13-mos.png",
+      "sha256": {
+        "ir": "0e29e625cef5504ee14a0362d603b707beb19a5941d4746623f5e7f660783390",
+        "image_pixels": "e62cbb2d3d1f87612b8c2e1d27fcad85ac0b0f00a8b8517c6e2d624ceaaaa7b4"
+      }
+    },
+    {
+      "id": "14-opamp",
+      "family": "opamp",
+      "image_variant": "base",
+      "coverage": [
+        "opamp",
+        "multiple_buses"
+      ],
+      "ir": "synthetic_ir/14-opamp.json",
+      "image": "synthetic_images/14-opamp.png",
+      "sha256": {
+        "ir": "be6c74ffce14497b215294e82cc7c4d93f55a6afeede1c7806502d47773cb039",
+        "image_pixels": "47a78d03e8ed50aba255e0c44c051ecbf0d7b382dae78c3124a42ebc3ec116cf"
+      }
+    },
+    {
+      "id": "15-transformer",
+      "family": "transformer",
+      "image_variant": "grayscale",
+      "coverage": [
+        "diodes_polar_capacitors",
+        "multiple_buses"
+      ],
+      "ir": "synthetic_ir/15-transformer.json",
+      "image": "synthetic_images/15-transformer.png",
+      "sha256": {
+        "ir": "32b3dc12f6bbb907d03e914daa4a0110a58b9fc03d1c8eb1ec6fbcf0ce52b932",
+        "image_pixels": "0888382d39c257a09a5db718968d757d9b5e648f00c917688df6761b5460a589"
+      }
+    },
+    {
+      "id": "16-spdt",
+      "family": "spdt",
+      "image_variant": "mild_blur",
+      "coverage": [
+        "multiple_buses"
+      ],
+      "ir": "synthetic_ir/16-spdt.json",
+      "image": "synthetic_images/16-spdt.png",
+      "sha256": {
+        "ir": "3b530e35a302834c74fc9b44ac2ab1a4492376555dd438043d150deab67c2e91",
+        "image_pixels": "0d8f43989490f6c52f724e41b30e8f6a5ce4e869d13821a284037e865ce7c237"
+      }
+    },
+    {
+      "id": "17-current-annotation",
+      "family": "current_annotation",
+      "image_variant": "base",
+      "coverage": [
+        "current_arrow"
+      ],
+      "ir": "synthetic_ir/17-current-annotation.json",
+      "image": "synthetic_images/17-current-annotation.png",
+      "sha256": {
+        "ir": "83d7d33ac159bdefa695143a7afb3c0f66a53cc4058dbc6fbd89f9a1c26ccc70",
+        "image_pixels": "ecb3f0b5750874ee4d655e8d92f9396609f8e77c2de75dfa18a964366259635a"
+      }
+    },
+    {
+      "id": "18-voltage-annotation",
+      "family": "voltage_annotation",
+      "image_variant": "label_displacement",
+      "coverage": [
+        "voltage_polarity"
+      ],
+      "ir": "synthetic_ir/18-voltage-annotation.json",
+      "image": "synthetic_images/18-voltage-annotation.png",
+      "sha256": {
+        "ir": "e1b04f99518823f32e862c091d9860e694cf2a7e6413f4b9a7fb3409f5b9d41e",
+        "image_pixels": "390c5f4409f72b0e945eef9b15c1143aad9405cefdb459931dc89674b300e11a"
+      }
+    },
+    {
+      "id": "19-node-polarity",
+      "family": "node_polarity",
+      "image_variant": "scale",
+      "coverage": [
+        "voltage_polarity",
+        "multiple_buses"
+      ],
+      "ir": "synthetic_ir/19-node-polarity.json",
+      "image": "synthetic_images/19-node-polarity.png",
+      "sha256": {
+        "ir": "d239f90a89068822aac05f6c2869ad095a3a5f8f0a4fb09b0a1a22972354d419",
+        "image_pixels": "af7fa2be3438a06066ed1d9ee12a3a1f071908b9a2e63c058e5a4750e7b4b8ce"
+      }
+    },
+    {
+      "id": "20-mixed-annotations",
+      "family": "mixed_annotations",
+      "image_variant": "small_rotation",
+      "coverage": [
+        "current_arrow",
+        "voltage_polarity",
+        "crossing_unconnected"
+      ],
+      "ir": "synthetic_ir/20-mixed-annotations.json",
+      "image": "synthetic_images/20-mixed-annotations.png",
+      "sha256": {
+        "ir": "99e96a1bac01c38e7f07b3f98373bdb3c0cc56874496fa47f04bce59d6b9a30a",
+        "image_pixels": "5316f81b50cfad9aa653dfdc458bea43bea228f14f3edac920527e1603305973"
+      }
+    }
+  ]
+}

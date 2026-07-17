@@ -3,7 +3,12 @@
 **Phase 3 标准**：题 1–5 Netlist F1 ≥ 0.95；报表输出 §11 全指标 + 轮数。→ **达成**。
 **Phase 4 workstream 1**：题 6–10 打分迭代（失分优先改规范/SKILL.md）；10 题报表齐全。→ **达成**。
 
-## 结果（`--rounds 1`，全部 Netlist F1 = 1.0000）
+## 历史结果（旧版 Netlist/Layout 评分，`--rounds 1`）
+
+下表由 v1 评分合同产生，仅保留为历史工程记录，**不得**解释为当前 v2 语义评分结果。
+当前 `scripts/score_ir.py` 会输出 `score_version=kirchhoff-semantic-score/2.0`，并增加
+声明/几何拓扑硬门禁、完整 annotation 语义和元件文字指标。由于私有 truth 不随公共包发布，
+当前分数不作为公共 CI 门禁；需要基准维护者在私有环境中重新生成并单独版本化。
 
 | 题 | 电路 | F1 | 连接 | 值 | **Netlist** | Layout | Total |
 |----|------|---:|-----:|---:|------------:|-------:|------:|
@@ -52,4 +57,4 @@ for n in 01 02 03 04 05 06 07 08 09 10; do
   py scripts/score_ir.py benchmark/cases/$n/truth.json benchmark/acceptance/cand$n.json --rounds 1
 done
 ```
-（`py` = `E:\Miniconda\python.exe`。）
+（`py` 表示当前项目环境中的 Python 3.9+ 解释器。）

@@ -1,0 +1,280 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "synthetic_images/10-rectifier.png",
+    "title": "Synthetic diode and filter network",
+    "grid": {
+      "unit_cm": 1.0,
+      "snap": 0.5
+    },
+    "canvas": {
+      "w": 12,
+      "h": 8
+    }
+  },
+  "style": {
+    "flavor": "american"
+  },
+  "routing": {
+    "orthogonal": "strict",
+    "grid_snap": "off",
+    "grid_step": 0.5
+  },
+  "nets": [
+    {
+      "name": "N_IN"
+    },
+    {
+      "name": "N_MID"
+    },
+    {
+      "name": "N_OUT"
+    },
+    {
+      "name": "GND"
+    }
+  ],
+  "components": [
+    {
+      "id": "V1",
+      "type": "vsource",
+      "from": [
+        1,
+        1
+      ],
+      "to": [
+        1,
+        6
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "GND"
+        },
+        {
+          "name": "2",
+          "net": "N_IN"
+        }
+      ],
+      "label": "V_1"
+    },
+    {
+      "id": "D1",
+      "type": "diode",
+      "from": [
+        1,
+        6
+      ],
+      "to": [
+        4,
+        6
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_IN"
+        },
+        {
+          "name": "2",
+          "net": "N_MID"
+        }
+      ],
+      "label": "D_1"
+    },
+    {
+      "id": "D2",
+      "type": "diode",
+      "from": [
+        4,
+        6
+      ],
+      "to": [
+        7,
+        6
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_MID"
+        },
+        {
+          "name": "2",
+          "net": "N_OUT"
+        }
+      ],
+      "label": "D_2"
+    },
+    {
+      "id": "C1",
+      "type": "polar_capacitor",
+      "from": [
+        7,
+        6
+      ],
+      "to": [
+        7,
+        1
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_OUT"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "C_1",
+      "value": "470\\mathrm{uF}",
+      "label_side": "right",
+      "value_side": "left"
+    },
+    {
+      "id": "R1",
+      "type": "resistor",
+      "from": [
+        10,
+        6
+      ],
+      "to": [
+        10,
+        1
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_OUT"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "R_L",
+      "value": "1\\mathrm{k}\\Omega",
+      "label_side": "right",
+      "value_side": "left"
+    },
+    {
+      "id": "GND1",
+      "type": "ground",
+      "at": [
+        7,
+        1
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "GND"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "points": [
+        {
+          "pin": "C1.1"
+        },
+        {
+          "pin": "R1.1"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "points": [
+        {
+          "pin": "V1.1"
+        },
+        {
+          "pin": "C1.2"
+        },
+        {
+          "pin": "R1.2"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "points": [
+        {
+          "xy": [
+            3,
+            2
+          ]
+        },
+        {
+          "xy": [
+            3,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "points": [
+        {
+          "xy": [
+            2,
+            3
+          ]
+        },
+        {
+          "xy": [
+            5,
+            3
+          ]
+        }
+      ]
+    }
+  ],
+  "junctions": [
+    {
+      "at": [
+        7,
+        6
+      ]
+    },
+    {
+      "at": [
+        7,
+        1
+      ]
+    }
+  ],
+  "crossings": [
+    {
+      "at": [
+        3,
+        3
+      ],
+      "style": "plain"
+    }
+  ],
+  "terminals": [],
+  "texts": [],
+  "annotations": [],
+  "regions": [
+    {
+      "name": "rectifier",
+      "component_ids": [
+        "V1",
+        "D1",
+        "D2"
+      ]
+    },
+    {
+      "name": "filter",
+      "component_ids": [
+        "C1",
+        "R1",
+        "GND1"
+      ]
+    }
+  ],
+  "unknowns": []
+}

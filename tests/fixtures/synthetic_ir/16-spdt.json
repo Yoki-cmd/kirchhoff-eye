@@ -1,0 +1,247 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "synthetic_images/16-spdt.png",
+    "title": "Synthetic SPDT selector",
+    "grid": {
+      "unit_cm": 1.0,
+      "snap": 0.5
+    },
+    "canvas": {
+      "w": 10,
+      "h": 7
+    }
+  },
+  "style": {
+    "flavor": "american"
+  },
+  "routing": {
+    "orthogonal": "strict",
+    "grid_snap": "off",
+    "grid_step": 0.5
+  },
+  "nets": [
+    {
+      "name": "N_IN"
+    },
+    {
+      "name": "N_A"
+    },
+    {
+      "name": "N_B"
+    },
+    {
+      "name": "GND"
+    }
+  ],
+  "components": [
+    {
+      "id": "S1",
+      "type": "spdt",
+      "at": [
+        5,
+        4
+      ],
+      "rotate": 0,
+      "mirror": false,
+      "pins": [
+        {
+          "name": "in",
+          "net": "N_IN"
+        },
+        {
+          "name": "out1",
+          "net": "N_A"
+        },
+        {
+          "name": "out2",
+          "net": "N_B"
+        }
+      ],
+      "label": "S_1"
+    },
+    {
+      "id": "R1",
+      "type": "resistor",
+      "from": [
+        6.5,
+        5.5
+      ],
+      "to": [
+        8.5,
+        5.5
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_A"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "R_A",
+      "value": "1\\mathrm{k}\\Omega"
+    },
+    {
+      "id": "R2",
+      "type": "resistor",
+      "from": [
+        6.5,
+        2.5
+      ],
+      "to": [
+        8.5,
+        2.5
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_B"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "R_B",
+      "value": "2\\mathrm{k}\\Omega"
+    },
+    {
+      "id": "GND1",
+      "type": "ground",
+      "at": [
+        8.5,
+        4
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "GND"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "points": [
+        {
+          "xy": [
+            2,
+            4
+          ]
+        },
+        {
+          "pin": "S1.in"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "points": [
+        {
+          "pin": "S1.out1"
+        },
+        {
+          "xy": [
+            6,
+            4.225
+          ]
+        },
+        {
+          "xy": [
+            6,
+            5.5
+          ]
+        },
+        {
+          "pin": "R1.1"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "points": [
+        {
+          "pin": "S1.out2"
+        },
+        {
+          "xy": [
+            6,
+            3.775
+          ]
+        },
+        {
+          "xy": [
+            6,
+            2.5
+          ]
+        },
+        {
+          "pin": "R2.1"
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "points": [
+        {
+          "pin": "R1.2"
+        },
+        {
+          "pin": "GND1.p"
+        }
+      ]
+    },
+    {
+      "id": "W5",
+      "points": [
+        {
+          "pin": "R2.2"
+        },
+        {
+          "xy": [
+            8.5,
+            4
+          ]
+        }
+      ]
+    }
+  ],
+  "junctions": [
+    {
+      "at": [
+        8.5,
+        4
+      ]
+    }
+  ],
+  "crossings": [],
+  "terminals": [
+    {
+      "at": [
+        2,
+        4
+      ],
+      "style": "ocirc",
+      "label": "in",
+      "label_side": "left"
+    }
+  ],
+  "texts": [],
+  "annotations": [],
+  "regions": [
+    {
+      "name": "selector",
+      "component_ids": [
+        "S1",
+        "R1",
+        "R2",
+        "GND1"
+      ]
+    }
+  ],
+  "unknowns": []
+}

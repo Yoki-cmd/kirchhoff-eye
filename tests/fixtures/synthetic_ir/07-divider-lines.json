@@ -1,0 +1,250 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "synthetic_images/07-divider-lines.png",
+    "title": "Synthetic voltage divider",
+    "grid": {
+      "unit_cm": 1.0,
+      "snap": 0.5
+    },
+    "canvas": {
+      "w": 8,
+      "h": 6
+    }
+  },
+  "style": {
+    "flavor": "american"
+  },
+  "routing": {
+    "orthogonal": "strict",
+    "grid_snap": "off",
+    "grid_step": 0.5
+  },
+  "nets": [
+    {
+      "name": "N_IN"
+    },
+    {
+      "name": "N_MID"
+    },
+    {
+      "name": "GND"
+    }
+  ],
+  "components": [
+    {
+      "id": "V1",
+      "type": "vsource",
+      "from": [
+        1,
+        1
+      ],
+      "to": [
+        1,
+        5
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "GND"
+        },
+        {
+          "name": "2",
+          "net": "N_IN"
+        }
+      ],
+      "label": "V_1",
+      "value": "6\\mathrm{V}",
+      "label_side": "left",
+      "value_side": "right"
+    },
+    {
+      "id": "R1",
+      "type": "resistor",
+      "from": [
+        3,
+        5
+      ],
+      "to": [
+        3,
+        3
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_IN"
+        },
+        {
+          "name": "2",
+          "net": "N_MID"
+        }
+      ],
+      "label": "R_1",
+      "value": "1\\mathrm{k}\\Omega",
+      "label_side": "right",
+      "value_side": "left"
+    },
+    {
+      "id": "R2",
+      "type": "resistor",
+      "from": [
+        3,
+        3
+      ],
+      "to": [
+        3,
+        1
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_MID"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "R_2",
+      "value": "2\\mathrm{k}\\Omega",
+      "label_side": "right",
+      "value_side": "left"
+    },
+    {
+      "id": "C1",
+      "type": "capacitor",
+      "from": [
+        5,
+        3
+      ],
+      "to": [
+        5,
+        1
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_MID"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "C_1",
+      "value": "100\\mathrm{nF}",
+      "label_side": "right",
+      "value_side": "left"
+    },
+    {
+      "id": "GND1",
+      "type": "ground",
+      "at": [
+        5,
+        1
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "GND"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "points": [
+        {
+          "pin": "V1.2"
+        },
+        {
+          "pin": "R1.1"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "points": [
+        {
+          "pin": "V1.1"
+        },
+        {
+          "xy": [
+            3,
+            1
+          ]
+        },
+        {
+          "pin": "C1.2"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "points": [
+        {
+          "pin": "R1.2"
+        },
+        {
+          "xy": [
+            5,
+            3
+          ]
+        },
+        {
+          "xy": [
+            7,
+            3
+          ]
+        }
+      ]
+    }
+  ],
+  "junctions": [
+    {
+      "at": [
+        3,
+        3
+      ]
+    },
+    {
+      "at": [
+        5,
+        3
+      ]
+    }
+  ],
+  "crossings": [],
+  "terminals": [
+    {
+      "at": [
+        7,
+        3
+      ],
+      "style": "ocirc",
+      "label": "a",
+      "label_side": "right"
+    }
+  ],
+  "texts": [],
+  "annotations": [],
+  "regions": [
+    {
+      "name": "source",
+      "component_ids": [
+        "V1"
+      ]
+    },
+    {
+      "name": "divider",
+      "component_ids": [
+        "R1",
+        "R2",
+        "C1",
+        "GND1"
+      ]
+    }
+  ],
+  "unknowns": []
+}

@@ -1,0 +1,230 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "synthetic_images/11-zener-led.png",
+    "title": "Synthetic zener and LED rail",
+    "grid": {
+      "unit_cm": 1.0,
+      "snap": 0.5
+    },
+    "canvas": {
+      "w": 10,
+      "h": 7
+    }
+  },
+  "style": {
+    "flavor": "american"
+  },
+  "routing": {
+    "orthogonal": "strict",
+    "grid_snap": "off",
+    "grid_step": 0.5
+  },
+  "nets": [
+    {
+      "name": "VCC"
+    },
+    {
+      "name": "N_OUT"
+    },
+    {
+      "name": "GND"
+    }
+  ],
+  "components": [
+    {
+      "id": "VCC1",
+      "type": "vcc",
+      "at": [
+        2,
+        6
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "VCC"
+        }
+      ],
+      "label": "+12\\mathrm{V}"
+    },
+    {
+      "id": "R1",
+      "type": "resistor",
+      "from": [
+        2,
+        6
+      ],
+      "to": [
+        2,
+        4
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "VCC"
+        },
+        {
+          "name": "2",
+          "net": "N_OUT"
+        }
+      ],
+      "label": "R_1",
+      "value": "1\\mathrm{k}\\Omega"
+    },
+    {
+      "id": "DZ1",
+      "type": "zener",
+      "from": [
+        4,
+        4
+      ],
+      "to": [
+        4,
+        2
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_OUT"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "D_Z"
+    },
+    {
+      "id": "LED1",
+      "type": "led",
+      "from": [
+        6,
+        4
+      ],
+      "to": [
+        6,
+        2
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_OUT"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "LED_1"
+    },
+    {
+      "id": "C1",
+      "type": "polar_capacitor",
+      "from": [
+        8,
+        4
+      ],
+      "to": [
+        8,
+        2
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_OUT"
+        },
+        {
+          "name": "2",
+          "net": "GND"
+        }
+      ],
+      "label": "C_1",
+      "value": "100\\mathrm{uF}"
+    },
+    {
+      "id": "GND1",
+      "type": "ground",
+      "at": [
+        6,
+        2
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "GND"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "points": [
+        {
+          "pin": "R1.2"
+        },
+        {
+          "pin": "DZ1.1"
+        },
+        {
+          "pin": "LED1.1"
+        },
+        {
+          "pin": "C1.1"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "points": [
+        {
+          "pin": "DZ1.2"
+        },
+        {
+          "pin": "LED1.2"
+        },
+        {
+          "pin": "C1.2"
+        }
+      ]
+    }
+  ],
+  "junctions": [
+    {
+      "at": [
+        4,
+        4
+      ]
+    },
+    {
+      "at": [
+        6,
+        4
+      ]
+    },
+    {
+      "at": [
+        6,
+        2
+      ]
+    }
+  ],
+  "crossings": [],
+  "terminals": [],
+  "texts": [],
+  "annotations": [],
+  "regions": [
+    {
+      "name": "regulator",
+      "component_ids": [
+        "VCC1",
+        "R1",
+        "DZ1",
+        "LED1",
+        "C1",
+        "GND1"
+      ]
+    }
+  ],
+  "unknowns": []
+}

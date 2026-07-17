@@ -39,6 +39,7 @@ ANCHOR_OPP = {"right": "west", "left": "east", "above": "south", "below": "north
 
 # 电流箭头方向 -> 单位向量（dir 约定同 rotate：0=+x, 90=+y, 逆时针）
 ARROW_UNIT = {0: (1.0, 0.0), 90: (0.0, 1.0), 180: (-1.0, 0.0), 270: (0.0, -1.0)}
+ANNOTATION_DIRECTION = {"right": 0, "up": 90, "left": 180, "down": 270}
 ARROW_LEN = 0.6  # 覆盖在导线上的短箭头长度
 
 # v1.1 label_gap/value_gap：side -> 外法向单位向量（独立标签节点 = 参考点 + 法向×gap）
@@ -56,6 +57,12 @@ def fmt_pt(p):
     return "(%s,%s)" % (fmt(p[0]), fmt(p[1]))
 
 
+def comment_text(value):
+    """Keep untrusted metadata on one TeX comment line."""
+    text = "".join(" " if ord(ch) < 32 or ch in "\u2028\u2029" else ch for ch in str(value))
+    return text.replace("^^", "^ ^")
+
+
 def travel_of(frm, to):
     dx, dy = to[0] - frm[0], to[1] - frm[1]
     if abs(dx) >= abs(dy):
@@ -71,6 +78,11 @@ class Serializer(object):
         self.config = config
         self.coords = self._pick_net_coordinates()  # quant key -> net 名
         self.jumps = self._index_jumps()            # quant key -> (节点名, coord)
+        self.component_annotation_kinds = {}
+        for annotation in ir.get("annotations", []):
+            target = annotation.get("target", {})
+            if "component" in target and annotation.get("kind") in ("component_id", "component_value"):
+                self.component_annotation_kinds.setdefault(target["component"], set()).add(annotation["kind"])
         # v1.1 scale 的两端件基数：单一真源 = config.style.ctikzset 里的 bipoles/length，
         # emit_two 输出 per-instance length = 基数 × scale（解析不到时按 circuitikz 默认 1.0）。
         m = re.search(r"bipoles/length=([0-9.]+)cm",
@@ -144,11 +156,12 @@ class Serializer(object):
         if comp["type"] in irlib.INVERT_TYPES:
             opts.append("invert")
         travel = travel_of(frm, to)
+        owned = self.component_annotation_kinds.get(comp["id"], set())
         extra = []  # v1.1 gap 标签：退出 to[] 选项，改独立节点（缺省时 l=/a= 原样）
-        if comp.get("label_at") is not None and comp.get("label"):
+        if "component_id" not in owned and comp.get("label_at") is not None and comp.get("label"):
             extra.append("\\node[anchor=center] at %s {$%s$};" % (
                 fmt_pt(tuple(comp["label_at"])), comp["label"]))
-        elif comp.get("label"):
+        elif "component_id" not in owned and comp.get("label"):
             side = comp.get("label_side") or PORT_SIDE[travel]
             if comp.get("label_gap") is not None:
                 extra.append(self._gapped_two_label(frm, to, side,
@@ -156,7 +169,7 @@ class Serializer(object):
             else:
                 key = LABEL_KEY[travel].get(side, "l")
                 opts.append("%s=$%s$" % (key, comp["label"]))
-        if comp.get("value"):
+        if "component_value" not in owned and comp.get("value"):
             side = comp.get("value_side") or STARBOARD[travel]
             if comp.get("value_gap") is not None:
                 extra.append(self._gapped_two_label(frm, to, side,
@@ -189,7 +202,7 @@ class Serializer(object):
             opts.append("scale=%s" % fmt(comp["scale"]))
         lines = ["\\node[%s] (%s) at %s {};"
                  % (", ".join(opts), comp["id"], fmt_pt(tuple(comp["at"])))]
-        if comp.get("label"):
+        if "component_id" not in self.component_annotation_kinds.get(comp["id"], set()) and comp.get("label"):
             lines.append(self._label_node_multi(comp))
         return lines
 
@@ -212,10 +225,11 @@ class Serializer(object):
         if comp.get("scale") is not None:
             opts.append("scale=%s" % fmt(comp["scale"]))
         lines = ["\\node[%s] at %s {};" % (", ".join(opts), fmt_pt(at))]
-        if comp.get("label_at") is not None and comp.get("label"):
+        owned = self.component_annotation_kinds.get(comp["id"], set())
+        if "component_id" not in owned and comp.get("label_at") is not None and comp.get("label"):
             lines.append("\\node[anchor=center] at %s {$%s$};" % (
                 fmt_pt(tuple(comp["label_at"])), comp["label"]))
-        elif comp.get("label"):
+        elif "component_id" not in owned and comp.get("label"):
             side = comp.get("label_side") or ("above" if comp["type"] == "vcc" else "below")
             g = float(comp.get("label_gap", 0.5))  # v1.1：缺省 = 既有常量
             dx, dy = {"above": (0, g), "below": (0, -g),
@@ -334,6 +348,44 @@ class Serializer(object):
                     ANCHOR_OPP[side], fmt_pt((at[0] + dx, at[1] + dy)), a["label"]))
         return lines
 
+    def emit_annotations(self):
+        """一等物理标注：语义归属来自 target，绘制位置严格来自 marker_at/label_at。"""
+        lines = []
+        for annotation in self.ir.get("annotations", []):
+            kind = annotation["kind"]
+            if kind == "current_direction":
+                at = tuple(annotation["marker_at"])
+                ux, uy = ARROW_UNIT[ANNOTATION_DIRECTION[annotation["direction"]]]
+                p0 = (at[0] - ux * ARROW_LEN / 2.0, at[1] - uy * ARROW_LEN / 2.0)
+                p1 = (at[0] + ux * ARROW_LEN / 2.0, at[1] + uy * ARROW_LEN / 2.0)
+                lines.append("\\draw[-{Latex}] %s -- %s;" % (fmt_pt(p0), fmt_pt(p1)))
+                if annotation.get("label") and annotation.get("label_at"):
+                    lines.append("\\node at %s {$%s$};" %
+                                 (fmt_pt(tuple(annotation["label_at"])), annotation["label"]))
+            elif kind == "voltage_measurement":
+                lines.append("\\node at %s {$+$};" %
+                             fmt_pt(tuple(annotation["positive_ref"]["marker_at"])))
+                lines.append("\\node at %s {$-$};" %
+                             fmt_pt(tuple(annotation["negative_ref"]["marker_at"])))
+                lines.append("\\node at %s {$%s$};" %
+                             (fmt_pt(tuple(annotation["label_at"])), annotation["label"]))
+            elif kind == "node_polarity":
+                symbol = "+" if annotation["polarity"] == "positive" else "-"
+                lines.append("\\node at %s {$%s$};" %
+                             (fmt_pt(tuple(annotation["marker_at"])), symbol))
+                if annotation.get("label"):
+                    lines.append("\\node[anchor=west] at %s {$%s$};" %
+                                 (fmt_pt(tuple(annotation["marker_at"])), annotation["label"]))
+            else:
+                label = annotation.get("label")
+                target = annotation.get("target", {})
+                if label is None and "component" in target:
+                    comp = self.model.components[target["component"]]
+                    label = comp.get("label" if kind == "component_id" else "value", "")
+                lines.append("\\node at %s {$%s$};" %
+                             (fmt_pt(tuple(annotation["label_at"])), label or ""))
+        return lines
+
     def emit_unknowns(self):
         lines = []
         for u in self.ir.get("unknowns", []):
@@ -357,7 +409,7 @@ class Serializer(object):
                             "component_ids": [c["id"] for c in rest]})
         for region in regions:
             lines.append("")
-            lines.append("%%%% ==== [region] %s ====" % region["name"])
+            lines.append("%%%% ==== [region] %s ====" % comment_text(region["name"]))
             comps = [self.model.components[cid] for cid in region["component_ids"]
                      if cid in self.model.components and cid not in emitted]
             emitted.update(c["id"] for c in comps)
@@ -394,8 +446,8 @@ class Serializer(object):
 
     def header_comment(self):
         meta = self.ir.get("meta", {})
-        lines = ["%% source: %s  (%s)" % (meta.get("source_image", "?"),
-                                          meta.get("title", "")),
+        lines = ["%% source: %s  (%s)" % (comment_text(meta.get("source_image", "?")),
+                                          comment_text(meta.get("title", ""))),
                  "% nets:"]
         members = self.geom.net_members()
         for net in self._net_order():
@@ -440,6 +492,11 @@ class Serializer(object):
             lines.append("")
             lines.append("%% ==== arrows ====")
             lines.extend(arrows)
+        annotations = self.emit_annotations()
+        if annotations:
+            lines.append("")
+            lines.append("%% ==== annotations ====")
+            lines.extend(annotations)
         unk = self.emit_unknowns()
         if unk:
             lines.append("")
@@ -450,7 +507,7 @@ class Serializer(object):
     def debug_layer(self):
         canvas = self.ir.get("meta", {}).get("canvas", {})
         w, h = canvas.get("w", 10), canvas.get("h", 10)
-        lines = ["% debug 层：网格 + 刻度 + 元件 id",
+        lines = ["% debug 层：网格 + 刻度 + 元件锚点 + id",
                  "\\draw[help lines, line width=0.1pt, gray!40, step=0.5] (0,0) grid %s;"
                  % fmt_pt((w, h)),
                  "\\draw[help lines, gray!70, step=1] (0,0) grid %s;" % fmt_pt((w, h)),
@@ -465,6 +522,10 @@ class Serializer(object):
                 cy = (comp["from"][1] + comp["to"][1]) / 2.0
             else:
                 cx, cy = comp["at"]
+            lines.append("%% component anchor %s" % comp["id"])
+            lines.append("\\draw[red, line width=0.4pt] %s -- %s %s -- %s;" % (
+                fmt_pt((cx - 0.08, cy)), fmt_pt((cx + 0.08, cy)),
+                fmt_pt((cx, cy - 0.08)), fmt_pt((cx, cy + 0.08))))
             lines.append("\\node[red, font=\\tiny, anchor=south west] at %s {%s};"
                          % (fmt_pt((cx + 0.1, cy + 0.1)), comp["id"]))
         return lines

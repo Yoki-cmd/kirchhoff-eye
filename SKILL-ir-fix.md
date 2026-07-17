@@ -16,10 +16,10 @@ description: >
 
 ```bash
 # IR 修复+渲染（原有功能）
-E:\Miniconda\python.exe scripts/ir_fix_and_render.py <ir.json> [-o <out_dir>] [--dpi 300]
+python scripts/ir_fix_and_render.py <ir.json> [-o <out_dir>] [--dpi 300]
 
 # 布局检查（新增）
-E:\Miniconda\python.exe scripts/ir_fix_and_render.py <circuit.tex> --layout-check [--json]
+python scripts/ir_fix_and_render.py <circuit.tex> --layout-check [--json]
 ```
 
 ## 自动修复能力

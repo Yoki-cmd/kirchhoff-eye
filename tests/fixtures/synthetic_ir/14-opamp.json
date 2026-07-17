@@ -1,0 +1,247 @@
+{
+  "version": "kirchhoff-ir/1.0",
+  "meta": {
+    "source_image": "synthetic_images/14-opamp.png",
+    "title": "Synthetic op-amp stage",
+    "grid": {
+      "unit_cm": 1.0,
+      "snap": 0.5
+    },
+    "canvas": {
+      "w": 12,
+      "h": 8
+    }
+  },
+  "style": {
+    "flavor": "american"
+  },
+  "routing": {
+    "orthogonal": "strict",
+    "grid_snap": "off",
+    "grid_step": 0.5
+  },
+  "nets": [
+    {
+      "name": "N_IN"
+    },
+    {
+      "name": "N_FB"
+    },
+    {
+      "name": "N_OUT"
+    },
+    {
+      "name": "GND"
+    }
+  ],
+  "components": [
+    {
+      "id": "U1",
+      "type": "opamp",
+      "at": [
+        6,
+        4
+      ],
+      "rotate": 0,
+      "mirror": false,
+      "pins": [
+        {
+          "name": "inn",
+          "net": "N_FB"
+        },
+        {
+          "name": "inp",
+          "net": "GND"
+        },
+        {
+          "name": "out",
+          "net": "N_OUT"
+        }
+      ],
+      "label": "U_1"
+    },
+    {
+      "id": "R1",
+      "type": "resistor",
+      "from": [
+        1,
+        4.35
+      ],
+      "to": [
+        4,
+        4.35
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_IN"
+        },
+        {
+          "name": "2",
+          "net": "N_FB"
+        }
+      ],
+      "label": "R_1",
+      "value": "10\\mathrm{k}\\Omega"
+    },
+    {
+      "id": "R2",
+      "type": "resistor",
+      "from": [
+        6.85,
+        5.5
+      ],
+      "to": [
+        4,
+        5.5
+      ],
+      "pins": [
+        {
+          "name": "1",
+          "net": "N_OUT"
+        },
+        {
+          "name": "2",
+          "net": "N_FB"
+        }
+      ],
+      "label": "R_F",
+      "value": "100\\mathrm{k}\\Omega"
+    },
+    {
+      "id": "GND1",
+      "type": "ground",
+      "at": [
+        4.5,
+        3.65
+      ],
+      "pins": [
+        {
+          "name": "p",
+          "net": "GND"
+        }
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "points": [
+        {
+          "xy": [
+            0.5,
+            4.35
+          ]
+        },
+        {
+          "pin": "R1.1"
+        }
+      ]
+    },
+    {
+      "id": "W2",
+      "points": [
+        {
+          "pin": "R1.2"
+        },
+        {
+          "pin": "U1.inn"
+        }
+      ]
+    },
+    {
+      "id": "W3",
+      "points": [
+        {
+          "pin": "U1.out"
+        },
+        {
+          "xy": [
+            9,
+            4
+          ]
+        },
+        {
+          "xy": [
+            9,
+            5.5
+          ]
+        },
+        {
+          "pin": "R2.1"
+        }
+      ]
+    },
+    {
+      "id": "W4",
+      "points": [
+        {
+          "pin": "R2.2"
+        },
+        {
+          "xy": [
+            4,
+            4.35
+          ]
+        }
+      ]
+    },
+    {
+      "id": "W5",
+      "points": [
+        {
+          "pin": "U1.inp"
+        },
+        {
+          "xy": [
+            4.5,
+            3.65
+          ]
+        }
+      ]
+    }
+  ],
+  "junctions": [
+    {
+      "at": [
+        4,
+        4.35
+      ]
+    }
+  ],
+  "crossings": [],
+  "terminals": [
+    {
+      "at": [
+        0.5,
+        4.35
+      ],
+      "style": "ocirc",
+      "label": "in",
+      "label_side": "left"
+    },
+    {
+      "at": [
+        9,
+        4
+      ],
+      "style": "ocirc",
+      "label": "out",
+      "label_side": "right"
+    }
+  ],
+  "texts": [],
+  "annotations": [],
+  "regions": [
+    {
+      "name": "amplifier",
+      "component_ids": [
+        "U1",
+        "R1",
+        "R2",
+        "GND1"
+      ]
+    }
+  ],
+  "unknowns": []
+}

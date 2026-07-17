@@ -21,6 +21,10 @@ from irlib import (EPS, GeomIndex, IRModel, Report, is_strictly_orthogonal,
                    pt_close, point_on_segment_interior, seg_is_orthogonal, snapped)
 
 PHASES = ("skeleton", "geometry", "full")
+SAFE_TEX_COMMANDS = frozenset({
+    "mu", "Omega", "mathrm",
+})
+SAFE_TEX_SINGLE_CHAR_COMMANDS = frozenset(",")
 
 
 def jptr(*parts):
@@ -115,6 +119,166 @@ def check_ids_refs(report, model, ir):
                 report.add("E002", "E", jptr("regions", ri, "component_ids", ci),
                            "region %r 引用了不存在的元件 %r" % (region.get("name"), cid),
                            "region 只能引用 components/unknowns 里已存在的 id")
+
+
+def check_annotations(report, model, ir):
+    annotations = ir.get("annotations", [])
+    seen = set()
+    wires = {wire.get("id") for wire in ir.get("wires", [])}
+    nets = {net.get("name") for net in ir.get("nets", [])}
+    nets.update(pin.get("net") for comp in ir.get("components", [])
+                for pin in comp.get("pins", []))
+    nodes = set(model.explicit_nodes)
+    geom = GeomIndex(model)
+
+    def fail(index, suffix, message, hint):
+        report.add("E015", "E", jptr("annotations", index, *suffix), message, hint)
+
+    def check_target(index, target, suffix=("target",)):
+        if "component" in target:
+            cid = target["component"]
+            if cid not in model.components:
+                fail(index, suffix + ("component",),
+                     "annotation 引用了不存在的元件 %r" % cid,
+                     "修正 target.component，或先在 components 中声明该元件")
+                return False
+        elif "wire" in target:
+            wid = target["wire"]
+            if wid not in wires:
+                fail(index, suffix + ("wire",),
+                     "annotation 引用了不存在的 wire %r" % wid,
+                     "修正 target.wire，或先在 wires 中声明该导线")
+                return False
+        elif "net" in target:
+            net = target["net"]
+            if net not in nets:
+                fail(index, suffix + ("net",),
+                     "annotation 引用了不存在的 net %r" % net,
+                     "修正 target.net，或先在 nets/pins 中声明该网络")
+                return False
+        elif "node" in target:
+            node = target["node"]
+            if node not in nodes:
+                fail(index, suffix + ("node",),
+                     "annotation 引用了不存在的显式 node %r" % node,
+                     "修正 target.node，或先在顶层 nodes 中声明该节点")
+                return False
+        return True
+
+    for i, annotation in enumerate(annotations):
+        aid = annotation.get("id")
+        if aid in seen:
+            fail(i, ("id",), "annotation id %r 重复" % aid,
+                 "每个 annotations[].id 必须全图唯一")
+        seen.add(aid)
+        kind = annotation.get("kind")
+        target = annotation.get("target")
+        target_ok = check_target(i, target) if target else True
+        target_kind = next(iter(target), None) if target else None
+        allowed_targets = {
+            "component_id": {"component"},
+            "component_value": {"component"},
+            "port_label": {"wire", "net", "node"},
+            "rail_label": {"net", "node"},
+            "node_polarity": {"net", "node"},
+        }
+        if target_ok and kind in allowed_targets and target_kind not in allowed_targets[kind]:
+            fail(i, ("target",),
+                 "%s 不能绑定到 %s" % (kind, target_kind),
+                 "使用与 annotation kind 匹配的 target 类型")
+        if kind == "current_direction" and target_ok:
+            if "component" in target:
+                comp = model.components[target["component"]]
+                if model.kind_of(comp) != "two":
+                    fail(i, ("target", "component"),
+                         "current_direction 不能绑定到非单支路元件 %s(%s)" %
+                         (comp.get("id"), comp.get("type")),
+                         "绑定明确的两端支路元件，或改用 target.wire")
+            elif "wire" not in target:
+                fail(i, ("target",),
+                     "current_direction 只能绑定 component 或 wire",
+                     "使用 target.component 或 target.wire 明确电流归属")
+        elif kind == "voltage_measurement":
+            positive = annotation["positive_ref"]
+            negative = annotation["negative_ref"]
+            positive_target = {k: v for k, v in positive.items() if k != "marker_at"}
+            negative_target = {k: v for k, v in negative.items() if k != "marker_at"}
+            check_target(i, positive_target, ("positive_ref",))
+            check_target(i, negative_target, ("negative_ref",))
+            def reference_root(target):
+                if "node" in target:
+                    return geom.root_of(tuple(model.explicit_nodes[target["node"]]["at"]))
+                members = geom.net_members().get(target.get("net"), [])
+                roots = {geom.root_of(coord) for _cid, _pname, coord in members}
+                return next(iter(roots)) if len(roots) == 1 else None
+
+            if (positive_target == negative_target or
+                    (reference_root(positive_target) is not None and
+                     reference_root(positive_target) == reference_root(negative_target))):
+                fail(i, ("negative_ref",),
+                     "voltage_measurement 的正负参考不能相同",
+                     "positive_ref 与 negative_ref 必须指向不同的 net/node")
+
+
+def _unsafe_tex_reason(text):
+    if any(ch in text for ch in ("$", "%", "#", "&", "~")) or "^^" in text:
+        return "包含可改变 TeX 解析状态的特殊字符"
+    if any(ord(ch) < 32 or ch in "\u2028\u2029" for ch in text):
+        return "包含控制字符或换行"
+    if any(ch in text for ch in ("[", "]", ";")):
+        return "包含可逃逸 TikZ 选项或语句的结构字符"
+    depth = 0
+    pos = 0
+    while pos < len(text):
+        ch = text[pos]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth < 0:
+                return "花括号未配对"
+        elif ch == ",":
+            return "包含可逃逸 TikZ 选项的裸逗号；数学间距请使用 \\,"
+        elif ch == "\\":
+            pos += 1
+            if pos >= len(text):
+                return "末尾存在孤立反斜杠"
+            if text[pos].isalpha():
+                end = pos + 1
+                while end < len(text) and text[end].isalpha():
+                    end += 1
+                command = text[pos:end]
+                pos = end - 1
+            else:
+                command = text[pos]
+            if command not in SAFE_TEX_COMMANDS and command not in SAFE_TEX_SINGLE_CHAR_COMMANDS:
+                return "TeX 命令 \\%s 不在安全白名单" % command
+        pos += 1
+    if depth:
+        return "花括号未配对"
+    return None
+
+
+def check_tex_text_safety(report, ir):
+    """E016：所有会进入 TeX 正文的外部文本只能使用受限数学命令。"""
+    values = []
+    for section in ("components", "terminals", "arrows"):
+        for i, item in enumerate(ir.get(section, [])):
+            for field in ("label", "value"):
+                if isinstance(item.get(field), str):
+                    values.append((jptr(section, i, field), item[field]))
+    for i, item in enumerate(ir.get("texts", [])):
+        values.append((jptr("texts", i, "content"), item.get("content", "")))
+    for i, item in enumerate(ir.get("annotations", [])):
+        if isinstance(item.get("label"), str):
+            values.append((jptr("annotations", i, "label"), item["label"]))
+    for path, text in values:
+        reason = _unsafe_tex_reason(text)
+        if reason:
+            report.add(
+                "E016", "E", path, reason,
+                "IR 文本按不带 $ 的受限数学内容处理；仅使用普通文字、上下标和文档列出的安全数学命令",
+            )
 
 
 # ---------------------------------------------------------------- E003
@@ -541,6 +705,8 @@ def check_unknowns_status(report, model, ir):
 
 def run_checks(report, model, ir, phase):
     check_ids_refs(report, model, ir)
+    check_annotations(report, model, ir)
+    check_tex_text_safety(report, ir)
     check_snap(report, model, ir)
     check_span(report, model, ir)
     check_multi_pins(report, model, ir)
