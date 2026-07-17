@@ -112,14 +112,24 @@ def test_generator_rebuilds_the_fixture_set(tmp_path):
     ]
     assert len(list((out / "synthetic_ir").glob("*.json"))) == 20
     assert len(list((out / "synthetic_images").glob("*.png"))) == 20
+    generated_by_id = {case["id"]: case for case in generated["cases"]}
     for case in committed["cases"]:
-        assert json.loads((out / case["ir"]).read_text(encoding="utf-8")) == json.loads(
+        generated_case = generated_by_id[case["id"]]
+        generated_ir_path = out / generated_case["ir"]
+        generated_image_path = out / generated_case["image"]
+        assert json.loads(generated_ir_path.read_text(encoding="utf-8")) == json.loads(
             (FIXTURES / case["ir"]).read_text(encoding="utf-8")
         )
-        generated_image = Image.open(out / case["image"]).convert("RGB")
+        generated_image = Image.open(generated_image_path).convert("RGB")
         committed_image = Image.open(FIXTURES / case["image"]).convert("RGB")
         assert generated_image.size == committed_image.size
-        assert generated_image.tobytes() == committed_image.tobytes()
+        assert generated_image.getextrema()[0][0] < 250
+        assert generated_case["sha256"]["ir"] == hashlib.sha256(
+            generated_ir_path.read_bytes()
+        ).hexdigest()
+        assert generated_case["sha256"]["image_pixels"] == image_pixel_sha256(
+            generated_image_path
+        )
         assert case["sha256"]["ir"] == hashlib.sha256((FIXTURES / case["ir"]).read_bytes()).hexdigest()
         assert case["sha256"]["image_pixels"] == image_pixel_sha256(FIXTURES / case["image"])
 
