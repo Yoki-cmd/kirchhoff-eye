@@ -136,7 +136,7 @@ def test_build_nonblocking_warning_without_source_remains_valid(tmp_path):
     assert (out / "circuit.png").stat().st_size > 0
 
 
-def test_build_nonblocking_warning_with_source_remains_needs_review(tmp_path):
+def test_build_missing_review_regions_with_source_needs_human(tmp_path):
     from kirchhoff_eye.cli import main
 
     warned = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
@@ -151,9 +151,9 @@ def test_build_nonblocking_warning_with_source_remains_needs_review(tmp_path):
         "--out", str(out), "--dpi", "72",
     ]) == 0
     state = json.loads((out / "review.json").read_text(encoding="utf-8"))
-    assert state["status"] == "needs_review"
+    assert state["status"] == "needs_human"
     assert state["ready_for_approval"] is False
-    assert state["reason_codes"] == []
+    assert "incomplete_review_regions" in state["reason_codes"]
 
 
 def test_build_unknowns_warning_is_blocking_needs_human(tmp_path):

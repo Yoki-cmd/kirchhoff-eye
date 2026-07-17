@@ -33,7 +33,10 @@
               "REMOVE_JUNCTION", "ADD_CROSSING", "MOVE_TEXT", "SET_REGION"
             ]
           },
-          "ir_path": {"type": "string", "pattern": "^/"},
+          "ir_path": {
+            "type": "string",
+            "pattern": "^/(components|unknowns|wires|junctions|crossings|texts|regions)/[0-9]+(?:/(?:type|at|from|to|label_at|rotate|mirror|value|label|label_side|pins|net|node|point|points|name|component_ids))?$"
+          },
           "description": {"type": "string", "minLength": 1},
           "difference_id": {"type": "string", "minLength": 1},
           "before_exists": {"type": "boolean"},

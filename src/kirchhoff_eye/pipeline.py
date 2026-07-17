@@ -2,9 +2,11 @@
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -69,7 +71,7 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
 def _read_json(path: Path) -> Dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
-        raise RuntimeError(f"expected a JSON object: {path}")
+        raise ValueError(f"expected a JSON object: {path}")
     return data
 
 
@@ -81,6 +83,14 @@ def _canonical_json(data: Any) -> bytes:
 
 def _document_hash(data: Any) -> str:
     return hashlib.sha256(_canonical_json(data)).hexdigest()
+
+
+def _json_file_hash(path: Path) -> str:
+    return _document_hash(_read_json(path))
+
+
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _resolve_pointer(document: Any, pointer: str) -> Any:
@@ -143,7 +153,7 @@ def _declared_patch_change(
     after_exists, after_value = _try_pointer(after, pointer)
     if not operation.startswith(("ADD_", "REMOVE_")):
         return (
-            before_exists and after_exists and before_value != after_value,
+            after_exists and (not before_exists or before_value != after_value),
             before_exists, before_value, after_exists, after_value,
         )
     try:
@@ -182,12 +192,13 @@ def _path_declared(path: str, operation: Dict[str, Any]) -> bool:
         return True
     if not operation["operation"].startswith(("ADD_", "REMOVE_")):
         return False
-    declared_parts = declared.rsplit("/", 1)
-    path_parts = path.rsplit("/", 1)
-    if len(declared_parts) != 2 or len(path_parts) != 2 or declared_parts[0] != path_parts[0]:
+    declared_parts = declared.strip("/").split("/")
+    path_parts = path.strip("/").split("/")
+    if len(declared_parts) != 2 or len(path_parts) < 2 or declared_parts[0] != path_parts[0]:
         return False
-    return declared_parts[1].isdigit() and path_parts[1].isdigit() and (
-        int(path_parts[1]) >= int(declared_parts[1])
+    return (
+        declared_parts[1].isdigit() and path_parts[1].isdigit()
+        and int(path_parts[1]) >= int(declared_parts[1])
     )
 
 
@@ -206,34 +217,33 @@ def _reported_changed_paths(
     return reported
 
 
-PATCH_FIELD_RULES = {
-    "CHANGE_TYPE": {"type"},
-    "MOVE": {"at", "from", "to", "label_at"},
-    "ROTATE": {"rotate"},
-    "MIRROR": {"mirror"},
-    "SET_VALUE": {"value"},
-    "SET_LABEL": {"label"},
-    "SET_LABEL_SIDE": {"label_side"},
-    "SET_LABEL_AT": {"label_at"},
-    "REWIRE": {"from", "to", "net", "node", "point", "pins"},
-    "SET_WAYPOINTS": {"waypoints"},
-    "MOVE_TEXT": {"at"},
-    "SET_REGION": {"name", "bbox", "component_ids"},
+PATCH_PATH_RULES = {
+    "ADD_COMPONENT": r"^/components/[0-9]+$",
+    "REMOVE_COMPONENT": r"^/components/[0-9]+$",
+    "CHANGE_TYPE": r"^/components/[0-9]+/type$",
+    "MOVE": r"^/(components|unknowns|texts)/[0-9]+/(at|from|to|label_at)$",
+    "ROTATE": r"^/components/[0-9]+/rotate$",
+    "MIRROR": r"^/components/[0-9]+/mirror$",
+    "SET_VALUE": r"^/components/[0-9]+/value$",
+    "SET_LABEL": r"^/components/[0-9]+/label$",
+    "SET_LABEL_SIDE": r"^/components/[0-9]+/label_side$",
+    "SET_LABEL_AT": r"^/components/[0-9]+/label_at$",
+    "REWIRE": r"^/components/[0-9]+/(from|to|pins)$",
+    "ADD_WIRE": r"^/wires/[0-9]+$",
+    "REMOVE_WIRE": r"^/wires/[0-9]+$",
+    "SET_WAYPOINTS": r"^/wires/[0-9]+/points$",
+    "ADD_JUNCTION": r"^/junctions/[0-9]+$",
+    "REMOVE_JUNCTION": r"^/junctions/[0-9]+$",
+    "ADD_CROSSING": r"^/crossings/[0-9]+$",
+    "MOVE_TEXT": r"^/texts/[0-9]+/at$",
+    "SET_REGION": r"^/regions/[0-9]+/(name|component_ids)$",
 }
 
 
-def _operation_matches_changed_fields(
-    operation: str, pointer: str, changed_paths: Sequence[str],
-) -> bool:
-    allowed = PATCH_FIELD_RULES.get(operation)
-    if allowed is None:
-        return True
-    relevant = [
-        path[len(pointer):].lstrip("/").split("/", 1)[0]
-        for path in changed_paths
-        if path == pointer or path.startswith(pointer + "/")
-    ]
-    return bool(relevant) and all(field in allowed for field in relevant)
+def _validate_operation_path(operation: str, pointer: str) -> None:
+    pattern = PATCH_PATH_RULES.get(operation)
+    if pattern is None or re.fullmatch(pattern, pointer) is None:
+        raise ValueError(f"patch operation {operation} is not valid for IR path {pointer}")
 
 
 def _load_json_output(stdout: str, tool: str) -> Dict[str, Any]:
@@ -287,12 +297,14 @@ def _append_reason(state: Dict[str, Any], code: str) -> None:
 def _patch_path_reason(rounds: Sequence[Dict[str, Any]]) -> Optional[str]:
     counts: Dict[str, int] = {}
     for item in rounds:
-        for operation in item.get("applied_patches", []):
-            path = operation.get("ir_path")
-            if isinstance(path, str):
-                counts[path] = counts.get(path, 0) + 1
-                if counts[path] >= 3:
-                    return f"patch_path_frozen:{path}"
+        paths = {
+            operation.get("ir_path") for operation in item.get("applied_patches", [])
+            if isinstance(operation.get("ir_path"), str)
+        }
+        for path in paths:
+            counts[path] = counts.get(path, 0) + 1
+            if counts[path] >= 3:
+                return f"patch_path_frozen:{path}"
     return None
 
 
@@ -406,7 +418,7 @@ def _snapshot_round(output: Path, round_number: int) -> None:
     snapshot = output / "rounds" / f"round-{round_number:02d}"
     snapshot.mkdir(parents=True, exist_ok=True)
     for name in (
-        "circuit.ir.json", "circuit.tex", "circuit.debug.tex", "circuit.png",
+        "source.png", "circuit.ir.json", "circuit.tex", "circuit.debug.tex", "circuit.png",
         "circuit.debug.png", "validation.json", "layout_report.json",
         f"cmp_round{round_number}.png",
     ):
@@ -427,18 +439,48 @@ def _round_artifacts(output: Path, round_number: int, include_source: bool) -> D
     return artifacts
 
 
-def _commit_stage(stage: Path, output: Path, round_number: int) -> None:
-    for name in (
-        "circuit.ir.json", "circuit.tex", "circuit.debug.tex", "circuit.png",
-        "circuit.debug.png", "validation.json", "layout_report.json",
-        f"cmp_round{round_number}.png",
-    ):
-        source = stage / name
-        if source.exists():
-            shutil.copy2(source, output / name)
-    compare = output / f"cmp_round{round_number}.png"
-    if compare.exists():
-        shutil.copy2(compare, output / "compare.png")
+def _atomic_copy(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(target.name + ".tmp")
+    shutil.copy2(source, temp)
+    temp.replace(target)
+
+
+def _publish_stage(stage: Path, output: Path, round_number: int) -> None:
+    relative_paths = [
+        Path(name) for name in (
+            "circuit.ir.json", "circuit.tex", "circuit.debug.tex", "circuit.png",
+            "circuit.debug.png", "validation.json", "layout_report.json",
+            f"cmp_round{round_number}.png", "compare.png", "FEEDBACK.md",
+            "review.json", "DELIVERY.md",
+        )
+        if (stage / name).is_file()
+    ]
+    snapshot = stage / "rounds" / f"round-{round_number:02d}"
+    if snapshot.is_dir():
+        relative_paths.extend(path.relative_to(stage) for path in snapshot.rglob("*") if path.is_file())
+    backup = Path(tempfile.mkdtemp(prefix="kirchhoff-publish-", dir=str(output.parent)))
+    existing = set()
+    try:
+        for relative in relative_paths:
+            target = output / relative
+            if target.is_file():
+                existing.add(relative)
+                _atomic_copy(target, backup / relative)
+        for relative in relative_paths:
+            _atomic_copy(stage / relative, output / relative)
+    except Exception:
+        for relative in relative_paths:
+            target = output / relative
+            saved = backup / relative
+            if relative in existing:
+                _atomic_copy(saved, target)
+            else:
+                target.unlink(missing_ok=True)
+        shutil.rmtree(output / "rounds" / f"round-{round_number:02d}", ignore_errors=True)
+        raise
+    finally:
+        shutil.rmtree(backup, ignore_errors=True)
 
 
 def _validate_document(data: Dict[str, Any], schema_name: str) -> None:
@@ -462,6 +504,30 @@ def _load_state(job_dir: str) -> Tuple[Path, Dict[str, Any]]:
     return output, state
 
 
+def _verify_round_evidence(output: Path, state: Dict[str, Any]) -> Tuple[str, str, str]:
+    round_number = state["current_round"]
+    latest = state["rounds"][-1]
+    snapshot = output / "rounds" / f"round-{round_number:02d}"
+    live_ir_hash = _json_file_hash(output / "circuit.ir.json")
+    source_hash = _file_hash(output / "source.png")
+    comparison_hash = _file_hash(output / f"cmp_round{round_number}.png")
+    expected = {
+        "ir_sha256": live_ir_hash,
+        "source_sha256": source_hash,
+        "comparison_sha256": comparison_hash,
+    }
+    for key, actual in expected.items():
+        if latest.get(key) != actual:
+            raise ValueError(f"current round evidence hash mismatch: {key}")
+    if _json_file_hash(snapshot / "circuit.ir.json") != live_ir_hash:
+        raise ValueError("round snapshot IR differs from the live IR")
+    if _file_hash(snapshot / "source.png") != source_hash:
+        raise ValueError("round snapshot source differs from the live source")
+    if _file_hash(snapshot / f"cmp_round{round_number}.png") != comparison_hash:
+        raise ValueError("round snapshot comparison differs from the live comparison")
+    return live_ir_hash, source_hash, comparison_hash
+
+
 def _validate_patch_manifest(
     previous_ir: Dict[str, Any], candidate_ir: Dict[str, Any], state: Dict[str, Any], patch_doc: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -471,6 +537,9 @@ def _validate_patch_manifest(
     if before_hash == after_hash:
         raise ValueError("repair candidate IR is unchanged")
     changed_paths = _changed_paths(previous_ir, candidate_ir)
+    difference_ids = [operation["difference_id"] for operation in patch_doc["operations"]]
+    if len(difference_ids) != len(set(difference_ids)):
+        raise ValueError("a difference_id cannot be referenced more than once per repair round")
     for operation in patch_doc["operations"]:
         difference = by_id.get(operation["difference_id"])
         if difference is None:
@@ -479,18 +548,12 @@ def _validate_patch_manifest(
             raise ValueError("patch ir_path must match its unresolved difference")
         if operation["operation"] != difference["patch_operation"]:
             raise ValueError("patch operation must match its unresolved difference")
+        _validate_operation_path(operation["operation"], operation["ir_path"])
         valid_shape, before_exists, before_value, after_exists, after_value = _declared_patch_change(
             previous_ir, candidate_ir, operation["ir_path"], operation["operation"]
         )
         if not valid_shape:
             raise ValueError(f"patch did not produce the declared change at {operation['ir_path']}")
-        if not _operation_matches_changed_fields(
-            operation["operation"], operation["ir_path"], changed_paths
-        ):
-            raise ValueError(
-                f"patch operation {operation['operation']} does not match changed fields "
-                f"at {operation['ir_path']}"
-            )
         operation.update({
             "before_exists": before_exists,
             "after_exists": after_exists,
@@ -510,10 +573,27 @@ def _validate_patch_manifest(
     }
 
 
-def _load_regions(ir_path: Path) -> List[str]:
+def _load_regions(ir_path: Path, *, require_complete: bool = False) -> List[str]:
     ir = _read_json(ir_path)
     regions = ir.get("regions", [])
-    return [item["name"] for item in regions if isinstance(item, dict) and isinstance(item.get("name"), str)]
+    names = [item["name"] for item in regions if isinstance(item, dict) and isinstance(item.get("name"), str)]
+    if require_complete:
+        if not names:
+            raise ValueError("source-backed workflow requires at least one review region")
+        if len(names) != len(set(names)):
+            raise ValueError("IR region names must be unique")
+        expected_ids = {
+            item["id"] for collection in ("components", "unknowns")
+            for item in ir.get(collection, []) if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        covered_ids = {
+            component_id for region in regions if isinstance(region, dict)
+            for component_id in region.get("component_ids", [])
+        }
+        missing = sorted(expected_ids - covered_ids)
+        if missing:
+            raise ValueError(f"review regions do not cover all components/unknowns: {missing}")
+    return names
 
 
 def _copy_task_input(
@@ -591,6 +671,8 @@ def _build(
             shutil.copy2(Path(source).resolve(), output / "source.png")
         elif preserve_history and not (output / "source.png").exists():
             raise OSError("repair requires the original source.png in the job directory")
+        elif preserve_history:
+            shutil.copy2(output / "source.png", work_output / "source.png")
         task_input_artifact = _copy_task_input(output, task_input)
     except OSError as exc:
         shutil.rmtree(work_output, ignore_errors=True) if preserve_history else None
@@ -645,23 +727,30 @@ def _build(
         compare = work_output / f"cmp_round{round_number}.png"
         rc, stdout, stderr = _run(
             "compare.py",
-            [str(output / "source.png"), str(png), "-o", str(compare)],
+            [str(work_output / "source.png"), str(png), "-o", str(compare)],
         )
         if rc != EXIT_OK:
             return abort(EXIT_ENV, stderr or stdout)
 
-    if preserve_history:
-        _commit_stage(work_output, output, round_number)
-        shutil.rmtree(work_output, ignore_errors=True)
-    elif include_source:
-        shutil.copy2(output / f"cmp_round{round_number}.png", output / "compare.png")
+    if include_source:
+        shutil.copy2(work_output / f"cmp_round{round_number}.png", work_output / "compare.png")
 
-    target_ir = output / "circuit.ir.json"
-    png = output / "circuit.png"
+    target_ir = work_ir
+    png = work_output / "circuit.png"
     status, reason_codes = _derive_initial_workflow_state(validation, layout, include_source)
+    if include_source:
+        try:
+            region_names = _load_regions(target_ir, require_complete=True)
+        except ValueError:
+            region_names = _load_regions(target_ir)
+            if "incomplete_review_regions" not in reason_codes:
+                reason_codes.append("incomplete_review_regions")
+            status = "needs_human"
+    else:
+        region_names = []
     regions = (
         [{"name": name, "conclusion": "pending", "summary": "等待审读"}
-         for name in _load_regions(target_ir)]
+         for name in region_names]
         if include_source else []
     )
     applied_patches: List[Dict[str, Any]] = []
@@ -676,7 +765,11 @@ def _build(
         "differences": [],
         "applied_patches": applied_patches,
         "artifacts": {},
+        "ir_sha256": _json_file_hash(target_ir),
     }
+    if include_source:
+        current_round["source_sha256"] = _file_hash(work_output / "source.png")
+        current_round["comparison_sha256"] = _file_hash(work_output / f"cmp_round{round_number}.png")
     if patches_file is not None and patch_doc.get("change_evidence"):
         current_round["change_evidence"] = patch_doc["change_evidence"]
     rounds = list(previous["rounds"]) if previous else []
@@ -706,11 +799,19 @@ def _build(
     if frozen_reason is not None:
         state["status"] = "needs_human"
         _append_reason(state, frozen_reason)
-    _copy_feedback(output)
-    _snapshot_round(output, round_number)
-    current_round["artifacts"] = _round_artifacts(output, round_number, include_source)
-    _write_json(output / "review.json", state)
-    _write_delivery(output, state)
+    publish_output = work_output if preserve_history else output
+    try:
+        _copy_feedback(publish_output)
+        _snapshot_round(publish_output, round_number)
+        current_round["artifacts"] = _round_artifacts(output, round_number, include_source)
+        _validate_document(state, "review-state.schema.json")
+        _write_json(publish_output / "review.json", state)
+        _write_delivery(publish_output, state)
+        if preserve_history:
+            _publish_stage(work_output, output, round_number)
+    finally:
+        if preserve_history:
+            shutil.rmtree(work_output, ignore_errors=True)
     return _status_exit(state["status"])
 
 
@@ -722,11 +823,13 @@ def review(job_dir: str, review_file: str) -> int:
         except json.JSONDecodeError as exc:
             raise ValueError(f"review JSON is malformed: {exc}") from exc
         _validate_document(report, "review.schema.json")
+        if not state.get("review_required"):
+            raise ValueError("job has no source comparison and cannot accept a source review")
         if state["status"] not in ("needs_review", "needs_human"):
             raise ValueError(f"job status {state['status']} cannot accept a source review")
         if report["round"] != state["current_round"]:
             raise ValueError("review round does not match current_round")
-        expected_regions = _load_regions(output / "circuit.ir.json")
+        expected_regions = _load_regions(output / "circuit.ir.json", require_complete=True)
         actual_regions = [item["name"] for item in report["regions"]]
         if len(actual_regions) != len(set(actual_regions)):
             raise ValueError("review region names must be unique")
@@ -736,15 +839,24 @@ def review(job_dir: str, review_file: str) -> int:
         difference_ids = [item["id"] for item in differences]
         if len(difference_ids) != len(set(difference_ids)):
             raise ValueError("review difference IDs must be unique")
-        difference_regions = any(item["conclusion"] == "differences" for item in report["regions"])
-        if bool(differences) != difference_regions:
-            raise ValueError("region conclusions and differences array disagree")
+        region_conclusions = {item["name"]: item["conclusion"] for item in report["regions"]}
+        difference_regions = {item["region"] for item in differences}
+        if not difference_regions <= set(expected_regions):
+            raise ValueError("review difference references an unknown region")
+        for region, conclusion in region_conclusions.items():
+            has_differences = region in difference_regions
+            if (conclusion == "differences") != has_differences:
+                raise ValueError("each region conclusion must agree with its bound differences")
         latest = state["rounds"][-1]
         if latest.get("reviewed"):
             raise ValueError("current round is already reviewed and immutable")
+        live_ir_hash, source_hash, comparison_hash = _verify_round_evidence(output, state)
         latest["reviewed"] = True
         latest["regions"] = report["regions"]
         latest["differences"] = differences
+        latest["reviewed_ir_sha256"] = live_ir_hash
+        latest["reviewed_source_sha256"] = source_hash
+        latest["reviewed_comparison_sha256"] = comparison_hash
         if differences and len(state["rounds"]) >= 2:
             previous_differences = state["rounds"][-2].get("differences", [])
             if previous_differences and len(differences) >= len(previous_differences):
@@ -774,11 +886,26 @@ def approve(job_dir: str, note: str = "") -> int:
         output, state = _load_state(job_dir)
         if state["status"] == "approved":
             return EXIT_OK
-        if not state.get("ready_for_approval"):
+        latest = state["rounds"][-1]
+        if not state.get("review_required") or not latest.get("reviewed"):
             raise ValueError("job is not ready for approval; complete a clean region review first")
+        _load_regions(output / "circuit.ir.json", require_complete=True)
+        if latest.get("differences") or state.get("reason_codes"):
+            raise ValueError("job has unresolved differences or blocking reasons")
+        reviewed_regions = latest.get("regions", [])
+        if not reviewed_regions or any(item.get("conclusion") != "no_difference" for item in reviewed_regions):
+            raise ValueError("approval requires a complete zero-difference region review")
+        live_ir_hash, source_hash, comparison_hash = _verify_round_evidence(output, state)
+        if live_ir_hash != latest.get("reviewed_ir_sha256"):
+            raise ValueError("live circuit IR differs from the reviewed IR")
+        if source_hash != latest.get("reviewed_source_sha256"):
+            raise ValueError("source evidence differs from the reviewed source")
+        if comparison_hash != latest.get("reviewed_comparison_sha256"):
+            raise ValueError("comparison evidence differs from the reviewed comparison")
         state["status"] = "approved"
-        state["approval"] = {"note": note}
+        state["approval"] = {"note": note, "ir_sha256": live_ir_hash}
         state["ready_for_approval"] = False
+        _validate_document(state, "review-state.schema.json")
         _write_json(output / "review.json", state)
         _write_delivery(output, state)
         return EXIT_OK

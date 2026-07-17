@@ -44,6 +44,9 @@ kirchhoff-eye approve out/job --note "逐区确认通过"
 kirchhoff-eye repair out/job repaired.ir.json --patches patches.json
 ```
 
+差异记录必须注明所属 region；每个 `difference_id` 每轮只能对应一个 patch。字段修改使用精确
+JSON Pointer，例如元件值 `/components/1/value`、走线转角 `/wires/0/points`。
+
 还可以用统一任务入口处理图片重画、自然语言简述、netlist、IR 编辑和直接渲染；这些入口都要求 Agent 先产出/审阅 canonical IR，不宣称自动理解任意输入：
 
 ```bash

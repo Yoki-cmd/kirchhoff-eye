@@ -169,8 +169,10 @@ ADD/REMOVE_JUNCTION, ADD_CROSSING, MOVE_TEXT, SET_REGION。
 - 收敛成功 = 某轮差异清单为空 **且** 逐区确认语句齐全 → `needs_review + ready_for_approval`；
   再执行 `approve` 才成为 `approved`。
 - 已审读轮次不可覆盖；若审读有差异，只能通过 repair 开启下一轮。
-- patch 必须引用当前差异的 `difference_id`，且 operation / IR path 必须与差异一致；候选 IR
-  必须产生对应实际变化，未声明变化、无变化和不存在路径一律拒绝。状态保存前记录前后 SHA-256。
+- patch 必须引用当前差异的 `difference_id`，且 operation / IR path 必须与差异一致；每个
+  difference 每轮只能引用一次。字段类操作使用精确 leaf path（如 `SET_VALUE -> /components/1/value`、
+  `SET_WAYPOINTS -> /wires/0/points`），增删操作使用集合索引 path。候选 IR 必须产生对应实际变化，
+  未声明变化、无变化和不存在路径一律拒绝。状态保存前记录前后 SHA-256。
 - 连续 2 轮差异条数不降 → 生产状态机转 `needs_human` 并禁止继续 repair；同一 IR path
   被 patch ≥3 次 → 冻结任务并禁止继续 repair。
 - 到上限仍有差异，或 unknowns 非空 → 状态 `needs_human`，交付物附遗留差异清单

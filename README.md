@@ -149,7 +149,7 @@ If differences remain, an Agent edits the canonical IR, records at most five pat
 kirchhoff-eye repair out/job repaired.ir.json --patches patches.json
 ```
 
-`config.json:max_rounds` is enforced by this production state machine. It also stops after two reviewed rounds whose difference count does not fall, or freezes an IR path after its third verified patch. Reviewed rounds are immutable. Every repair operation must cite a current `difference_id`; the backend verifies the declared IR path and operation against the actual canonical before/after change and records document SHA-256 hashes. `review.json` keeps every reviewed round and verified patch log; each round also has an immutable snapshot under `rounds/`.
+`config.json:max_rounds` is enforced by this production state machine. It also stops after two reviewed rounds whose difference count does not fall, or freezes an IR path after its third verified patch in distinct rounds. Reviewed rounds are immutable. Every repair operation must cite one current `difference_id`, use the operation's exact canonical path shape (for example `/components/1/value` or `/wires/0/points`), and match the actual before/after change. The backend records document SHA-256 hashes, binds clean reviews to the reviewed IR/source/comparison evidence, and rechecks those hashes before approval. `review.json` keeps every reviewed round and verified patch log; each round also has an immutable snapshot under `rounds/`.
 
 ## Agent task router
 
@@ -166,7 +166,7 @@ kirchhoff-eye task repair out/redraw repaired.ir.json --patches patches.json
 kirchhoff-eye task approve out/redraw
 ```
 
-The review and patch input contracts are machine-readable at `schemas/review.schema.json` and `schemas/patch-operations.schema.json`.
+The review and patch input contracts are machine-readable at `schemas/review.schema.json` and `schemas/patch-operations.schema.json`. Every difference is bound to a named region.
 
 ## Review without guessing
 

@@ -8,15 +8,18 @@
     "current_round", "max_rounds", "review_required", "ready_for_approval", "reason_codes",
     "rounds", "artifacts"
   ],
-  "additionalProperties": true,
+  "additionalProperties": false,
   "properties": {
     "report_version": {"const": "kirchhoff-review/1.0"},
     "status": {"enum": ["valid", "needs_review", "needs_human", "approved"]},
     "task": {
       "type": "object",
       "required": ["kind"],
-      "additionalProperties": true,
-      "properties": {"kind": {"type": "string", "minLength": 1}}
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["redraw-image", "draw-from-description", "draw-from-netlist", "edit-ir", "render"]},
+        "input_artifact": {"type": "string", "minLength": 1}
+      }
     },
     "validation_status": {"enum": ["ok", "warn"]},
     "layout_status": {"enum": ["ok", "warn"]},
@@ -30,18 +33,34 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["round", "reviewed", "regions", "differences", "applied_patches", "artifacts"],
-        "additionalProperties": true,
+        "required": ["round", "reviewed", "regions", "differences", "applied_patches", "artifacts", "ir_sha256"],
+        "additionalProperties": false,
         "properties": {
           "round": {"type": "integer", "minimum": 1},
           "reviewed": {"type": "boolean"},
           "regions": {"type": "array"},
           "differences": {"type": "array"},
           "applied_patches": {"type": "array"},
-          "artifacts": {"type": "object"}
+          "artifacts": {"type": "object"},
+          "ir_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "comparison_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "reviewed_ir_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "reviewed_source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "reviewed_comparison_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "change_evidence": {"type": "object"}
         }
       }
     },
-    "artifacts": {"type": "object"}
+    "artifacts": {"type": "object"},
+    "approval": {
+      "type": "object",
+      "required": ["note", "ir_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "note": {"type": "string"},
+        "ir_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
   }
 }
