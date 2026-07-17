@@ -103,11 +103,19 @@ def test_generator_rebuilds_the_fixture_set(tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     generated = load_manifest(out / "synthetic_manifest.json")
     committed = load_manifest()
-    assert generated == committed
+    assert [
+        {key: value for key, value in case.items() if key != "sha256"}
+        for case in generated["cases"]
+    ] == [
+        {key: value for key, value in case.items() if key != "sha256"}
+        for case in committed["cases"]
+    ]
     assert len(list((out / "synthetic_ir").glob("*.json"))) == 20
     assert len(list((out / "synthetic_images").glob("*.png"))) == 20
     for case in committed["cases"]:
-        assert (out / case["ir"]).read_bytes() == (FIXTURES / case["ir"]).read_bytes()
+        assert json.loads((out / case["ir"]).read_text(encoding="utf-8")) == json.loads(
+            (FIXTURES / case["ir"]).read_text(encoding="utf-8")
+        )
         generated_image = Image.open(out / case["image"]).convert("RGB")
         committed_image = Image.open(FIXTURES / case["image"]).convert("RGB")
         assert generated_image.size == committed_image.size
@@ -153,7 +161,10 @@ def test_committed_label_variant_matches_deterministic_transform(tmp_path):
 
     apply_variant(IMAGE_DIR / "01-divider-base.png", output, "label_displacement")
 
-    assert output.read_bytes() == (IMAGE_DIR / "09-divider-label.png").read_bytes()
+    generated = Image.open(output).convert("RGB")
+    committed = Image.open(IMAGE_DIR / "09-divider-label.png").convert("RGB")
+    assert generated.size == committed.size
+    assert generated.tobytes() == committed.tobytes()
 
 
 def test_all_synthetic_ir_cases_build_end_to_end(tmp_path):

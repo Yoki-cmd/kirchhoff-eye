@@ -13,8 +13,9 @@ benchmark/samples/
 *.webp
 *.bmp
 
-# 本地用户坐标调整文件
+# 本地用户坐标调整文件（仓库内模板仍需跟踪）
 component_label_positions.json
+!templates/component_label_positions.json
 
 # Python
 __pycache__/

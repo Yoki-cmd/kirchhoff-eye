@@ -36,7 +36,8 @@ def test_python_workflow_runs_the_public_matrix_and_verification_gate():
         assert command in text
     for package in (
         "texlive-latex-base", "texlive-latex-extra", "texlive-pictures",
-        "texlive-luatex", "texlive-lang-chinese", "poppler-utils",
+        "texlive-luatex", "texlive-lang-chinese", "texlive-lang-japanese",
+        "poppler-utils",
     ):
         assert package in text
     assert "if: matrix.python-version == '3.9'" in text
@@ -52,6 +53,7 @@ def test_tex_workflow_exercises_compile_render_label_and_pipeline_paths():
         "texlive-pictures",
         "texlive-luatex",
         "texlive-lang-chinese",
+        "texlive-lang-japanese",
         "poppler-utils",
     ):
         assert package in text

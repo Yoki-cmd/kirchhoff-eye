@@ -43,6 +43,7 @@ jobs:
             texlive-pictures \
             texlive-luatex \
             texlive-lang-chinese \
+            texlive-lang-japanese \
             poppler-utils
 
       - name: Install project
