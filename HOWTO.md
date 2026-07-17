@@ -23,9 +23,36 @@
 
 ## 交付状态
 
-- **ok**：对比无差异，直接可用。
+- **valid**：IR、拓扑、布局与渲染均有效；没有原图时不代表做过忠实度审批。
+- **needs_review**：已生成原图对比，但逐区审读或显式批准尚未完成。
 - **needs_human**：有我拿不准的地方（如词表外的符号会画成虚线占位框 UNK1），
-  交付单里列了遗留问题和取证截图，等你拍板。
+  或达到最大轮次仍有差异；交付单里列了遗留问题，等你拍板。
+- **approved**：每个 region 都已明确核对且差异为空，并执行了显式批准。
+
+普通画布、间距、粗略重叠等 W 级建议只进入诊断报告，不会单独把任务升级成 `needs_human`。
+
+如果你直接操作 CLI，审读和批准是两个步骤：
+
+```bash
+kirchhoff-eye review out/job round-review.json
+kirchhoff-eye approve out/job --note "逐区确认通过"
+```
+
+有差异时先让 Agent 修改 IR，再用 `repair` 记录 patch 并开启下一轮：
+
+```bash
+kirchhoff-eye repair out/job repaired.ir.json --patches patches.json
+```
+
+还可以用统一任务入口处理图片重画、自然语言简述、netlist、IR 编辑和直接渲染；这些入口都要求 Agent 先产出/审阅 canonical IR，不宣称自动理解任意输入：
+
+```bash
+kirchhoff-eye task redraw-image source.png reviewed.ir.json --out out/redraw
+kirchhoff-eye task draw-from-description brief.txt authored.ir.json --out out/brief
+kirchhoff-eye task draw-from-netlist input.cir authored.ir.json --out out/netlist
+kirchhoff-eye task edit-ir request.txt edited.ir.json --out out/edit
+kirchhoff-eye task render circuit.ir.json --out out/render
+```
 
 ## 怎么提修改
 

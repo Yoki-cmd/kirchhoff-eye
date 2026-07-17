@@ -1,8 +1,8 @@
 ---
 name: kirchhoff-eye
-description: "Use when redrawing a printed or software-exported circuit diagram as topology-aware JSON IR and deterministic circuitikz. The public workflow is AI-assisted and human-in-the-loop: inspect the image, author/review canonical IR, then validate, serialize, render, compare, and iterate. Do not claim autonomous arbitrary image-to-IR recognition."
+description: "Use for IR-driven circuit drawing tasks: redraw a printed/software-exported schematic, draw from a description or netlist, edit/review/repair an IR, or render deterministic circuitikz. Every route converges on canonical JSON IR. Do not claim autonomous arbitrary image/prose/netlist-to-IR recognition."
 metadata:
-  version: 0.2.0
+  version: 0.3.0
 ---
 
 # Kirchhoff-eye：AI 辅助电路图重画 → circuitikz
@@ -16,6 +16,7 @@ metadata:
 
 **能力边界**：公开仓库提供确定性的 IR 校验、序列化、渲染、对比和布局检查后端；
 图片理解仍由 AI/人工审阅完成，不得宣称已提供任意电路图的全自动 image-to-IR 识别器。
+自然语言和 netlist 入口同样是 **Agent 先产出/审阅 IR，再交给确定性后端**，不是内置的自动转换器。
 
 规范文件（先读再干活）：
 - `references/ir-schema.md` — IR 语义正本 + 字段检查清单（§10）
@@ -34,13 +35,16 @@ python -m pip install -e ".[dev]"
 kirchhoff-eye --help
 ```
 
-v0.2 已提供稳定的顶层 CLI/版本入口；现有 `scripts/` 命令继续作为向后兼容入口，后续生产
-子命令逐步迁移到 `kirchhoff-eye`。若当前解释器缺少依赖，应切换虚拟环境，不把个人机器路径
-写入仓库。
+v0.3 已提供稳定顶层 CLI、显式审阅状态机和统一任务路由；现有 `scripts/` 命令继续作为
+向后兼容入口。若当前解释器缺少依赖，应切换虚拟环境，不把个人机器路径写入仓库。
 
 | 命令 | 作用 |
 |---|---|
-| `kirchhoff-eye build ir.json [--source source.png] --out out/job [--dpi 300]` | 生产编排：校验→序列化→正常/调试渲染→布局报告→对比图→交付报告 |
+| `kirchhoff-eye build ir.json [--source source.png] --out out/job [--dpi 300]` | 生产编排；无 source 得 `valid`，有 source 开启 `needs_review` 第 1 轮 |
+| `kirchhoff-eye review out/job round-review.json` | 写入逐区结论和结构化差异；每个 IR region 必须恰有一条结论 |
+| `kirchhoff-eye repair out/job repaired.ir.json --patches patches.json` | 校验 Agent 已修改的 IR，记录本轮 ≤5 个 patch，并开启下一轮 |
+| `kirchhoff-eye approve out/job [--note ...]` | 仅在逐区审读完整且差异为空时显式批准 |
+| `kirchhoff-eye task <route> ...` | 统一路由：redraw-image / draw-from-description / draw-from-netlist / edit-ir / review / repair / render / approve |
 | `kirchhoff-eye labels apply ir.json positions.json -o labelled.ir.json` | 批量应用人工确认的 `元件ID -> [x,y]` 编号坐标；`null` 保持当前位置 |
 | `kirchhoff-eye doctor [--json]` | 检查 Python、打包资源、TeX 引擎、`pdftoppm`、真实 circuitikz 编译和可写输出目录 |
 | `python scripts/validate_ir.py ir.json [--phase skeleton\|geometry\|full] [--json]` | 校验（0 干净/1 仅警告/2 有错/3 环境错） |
@@ -159,25 +163,35 @@ ADD/REMOVE_JUNCTION, ADD_CROSSING, MOVE_TEXT, SET_REGION。
 每轮只执行优先级最高的 **≤5 条**（小步防震荡），改完 validate 再进下一轮。
 
 **收敛与止损**（config.json `max_rounds`，默认 3）：
-- 收敛成功 = 某轮差异清单为空 **且** 逐区确认语句齐全 → 交付，状态 `ok`。
-- 连续 2 轮差异条数不降 → 停；同一 IR path 被 patch ≥3 次 → 冻结该项进遗留清单。
+- 状态语义：`valid`=IR 与产物有效；`needs_review`=待逐区审读或待显式批准；
+  `needs_human`=明确 blocker（如 W108 unknown）、收敛止损或轮次上限；普通 W 级布局/画布建议
+  只保留在 validation/layout 报告，不阻塞批准；`approved`=零差异审读后显式批准。
+- 收敛成功 = 某轮差异清单为空 **且** 逐区确认语句齐全 → `needs_review + ready_for_approval`；
+  再执行 `approve` 才成为 `approved`。
+- 已审读轮次不可覆盖；若审读有差异，只能通过 repair 开启下一轮。
+- patch 必须引用当前差异的 `difference_id`，且 operation / IR path 必须与差异一致；候选 IR
+  必须产生对应实际变化，未声明变化、无变化和不存在路径一律拒绝。状态保存前记录前后 SHA-256。
+- 连续 2 轮差异条数不降 → 生产状态机转 `needs_human` 并禁止继续 repair；同一 IR path
+  被 patch ≥3 次 → 冻结任务并禁止继续 repair。
 - 到上限仍有差异，或 unknowns 非空 → 状态 `needs_human`，交付物附遗留差异清单
   （每条带取证图路径）。**绝不为了收敛而删掉看得见的差异。**
 
-## 6. 交付四件套
+## 6. 交付与轮次历史
 
 工作目录 `out/<job>/` 交付：
 1. `circuit.tex` — 带分区块注释的 circuitikz 代码
 2. `circuit.png` — 渲染图
 3. `circuit.debug.png` — 网格+元件 ID 版（用户指着说话用）
-4. `DELIVERY.md` — 按 `templates/DELIVERY.md` 填：状态(ok|needs_human)、并排对比图、
-   遗留差异表、反馈话术指引（正文抄自 `templates/FEEDBACK.md`）
+4. `circuit.ir.json` — canonical truth source
+5. `review.json` — 状态、轮次、逐区差异、patch 记录、批准状态
+6. `cmp_round<N>.png` + `rounds/round-<NN>/` — 每轮不可变对比与快照
+7. `DELIVERY.md` + `FEEDBACK.md` — 完整交付报告和反馈话术
 
 ## 7. 用户反馈处理
 
 **人的反馈永远落到 ir.json 再重序列化，绝不手改 tex。**
 用户话术 → patch 操作对照表见 `templates/FEEDBACK.md`（随每次交付附带）。
-改完 IR 重跑 §5 单轮流程，产物覆盖交付目录。
+改完 IR 后写 `patches.json`，执行 `repair`；最新产物覆盖顶层，但历史轮次保留在 `rounds/`。
 
 ## 8. v1 边界（遇到就明说，别硬画）
 

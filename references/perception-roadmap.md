@@ -3,7 +3,7 @@
 ## Status
 
 Kirchhoff-eye does not ship an autonomous arbitrary-image-to-IR recognizer. The
-public v0.2 product is an AI-assisted, human-reviewed workflow backed by a
+public v0.3 product is an Agent-assisted, human-reviewed workflow backed by a
 deterministic IR validator, serializer, renderer, layout checker, and scoring
 system.
 
@@ -125,9 +125,10 @@ Return `needs_human` when any of the following remains unresolved:
 - text or physical-annotation ownership;
 - a contradiction between explicit topology and conductor geometry.
 
-Return `ok` only with zero blocking topology ambiguity and after the candidate IR
-passes canonical validation, deterministic serialization, rendering, and layout
-checks.
+Return workflow state `valid` only with zero blocking topology ambiguity and after
+the candidate IR passes canonical validation, deterministic serialization, rendering,
+and layout checks. If a source comparison exists, return `needs_review` until a complete
+region review is explicitly approved.
 
 ## Evaluation policy
 

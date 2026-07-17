@@ -37,10 +37,15 @@ def test_build_valid_ir_without_source_creates_complete_artifacts(tmp_path):
 
     assert validation["status"] == "ok"
     assert layout["status"] == "ok"
-    assert review["status"] == "ok"
+    assert review["report_version"] == "kirchhoff-review/1.0"
+    assert review["status"] == "valid"
+    assert review["task"]["kind"] == "render"
+    assert review["current_round"] == 1
+    assert review["max_rounds"] == 3
     assert review["artifacts"]["circuit_png"] == str((out / "circuit.png").resolve())
     assert str((out / "circuit.ir.json").resolve()) in delivery
     assert "compare_png" not in review["artifacts"]
+    assert "Status: **valid**" in delivery
 
 
 def test_build_help_is_available(capsys):
@@ -72,12 +77,19 @@ def test_build_with_source_copies_input_and_generates_comparison(tmp_path):
     assert rc == 0
     assert (out / "source.png").read_bytes() == source.read_bytes()
     assert (out / "compare.png").stat().st_size > 0
+    assert (out / "cmp_round1.png").stat().st_size > 0
+    assert (out / "FEEDBACK.md").stat().st_size > 0
 
     review = json.loads((out / "review.json").read_text(encoding="utf-8"))
     delivery = (out / "DELIVERY.md").read_text(encoding="utf-8")
+    assert review["status"] == "needs_review"
+    assert review["task"]["kind"] == "redraw-image"
+    assert review["ready_for_approval"] is False
     assert review["artifacts"]["source_png"] == str((out / "source.png").resolve())
-    assert review["artifacts"]["compare_png"] == str((out / "compare.png").resolve())
-    assert str((out / "compare.png").resolve()) in delivery
+    assert review["artifacts"]["compare_png"] == str((out / "cmp_round1.png").resolve())
+    assert str((out / "cmp_round1.png").resolve()) in delivery
+    assert "逐区核对结论" in delivery
+    assert "等待审读" in delivery
 
 
 def test_build_supports_chinese_and_space_paths(tmp_path):
@@ -99,12 +111,13 @@ def test_build_supports_chinese_and_space_paths(tmp_path):
     assert rc == 0
     for name in (
         "circuit.png", "circuit.debug.png", "compare.png", "validation.json",
-        "layout_report.json", "review.json", "DELIVERY.md",
+        "cmp_round1.png", "layout_report.json", "review.json", "DELIVERY.md",
+        "FEEDBACK.md",
     ):
         assert (out / name).is_file() and (out / name).stat().st_size > 0
 
 
-def test_build_warning_ir_returns_needs_human_with_artifacts(tmp_path):
+def test_build_nonblocking_warning_without_source_remains_valid(tmp_path):
     from kirchhoff_eye.cli import main
 
     warned = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
@@ -115,11 +128,54 @@ def test_build_warning_ir_returns_needs_human_with_artifacts(tmp_path):
 
     rc = main(["build", str(warned_path), "--out", str(out), "--dpi", "120"])
 
-    assert rc == 1
+    assert rc == 0
     review = json.loads((out / "review.json").read_text(encoding="utf-8"))
-    assert review["status"] == "needs_human"
+    assert review["status"] == "valid"
     assert review["validation_status"] == "warn"
+    assert review["reason_codes"] == []
     assert (out / "circuit.png").stat().st_size > 0
+
+
+def test_build_nonblocking_warning_with_source_remains_needs_review(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    warned = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
+    warned["regions"] = []
+    warned_path = tmp_path / "warned.json"
+    warned_path.write_text(json.dumps(warned), encoding="utf-8")
+    source = ROOT / "tests" / "golden" / "A" / "golden.png"
+    out = tmp_path / "job"
+
+    assert main([
+        "build", str(warned_path), "--source", str(source),
+        "--out", str(out), "--dpi", "72",
+    ]) == 0
+    state = json.loads((out / "review.json").read_text(encoding="utf-8"))
+    assert state["status"] == "needs_review"
+    assert state["ready_for_approval"] is False
+    assert state["reason_codes"] == []
+
+
+def test_build_unknowns_warning_is_blocking_needs_human(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    warned = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
+    warned["unknowns"] = [{
+        "id": "UNK1",
+        "at": [6, 4],
+        "size": [1, 1],
+        "pin_count": 0,
+        "pins": [],
+        "appearance": "unresolved symbol",
+    }]
+    warned_path = tmp_path / "warned.json"
+    warned_path.write_text(json.dumps(warned), encoding="utf-8")
+    out = tmp_path / "job"
+
+    assert main(["build", str(warned_path), "--out", str(out), "--dpi", "72"]) == 0
+    state = json.loads((out / "review.json").read_text(encoding="utf-8"))
+    assert state["status"] == "needs_human"
+    assert "blocking_unknown" in state["reason_codes"]
 
 
 def test_build_invalid_ir_returns_canonical_error_and_stops(tmp_path):
@@ -157,7 +213,7 @@ def test_reusing_output_directory_removes_stale_artifacts(tmp_path):
     for stale in (
         "source.png", "compare.png", "circuit.tex", "circuit.debug.tex",
         "circuit.png", "circuit.debug.png", "layout_report.json",
-        "review.json", "DELIVERY.md",
+        "review.json", "DELIVERY.md", "FEEDBACK.md", "cmp_round1.png",
     ):
         assert not (out / stale).exists(), stale
 

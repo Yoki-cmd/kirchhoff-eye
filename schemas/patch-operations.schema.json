@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kirchhoff-patch-operations-1.0.schema.json",
+  "title": "kirchhoff-patch-operations/1.0",
+  "type": "object",
+  "required": ["operations"],
+  "additionalProperties": false,
+  "properties": {
+    "change_evidence": {
+      "type": "object",
+      "required": ["before_sha256", "after_sha256", "changed_paths"],
+      "additionalProperties": false,
+      "properties": {
+        "before_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "after_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "changed_paths": {"type": "array", "items": {"type": "string", "pattern": "^/"}}
+      }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["operation", "ir_path", "description", "difference_id"],
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "enum": [
+              "ADD_COMPONENT", "REMOVE_COMPONENT", "CHANGE_TYPE", "MOVE", "ROTATE",
+              "MIRROR", "SET_VALUE", "SET_LABEL", "SET_LABEL_SIDE", "SET_LABEL_AT",
+              "REWIRE", "ADD_WIRE", "REMOVE_WIRE", "SET_WAYPOINTS", "ADD_JUNCTION",
+              "REMOVE_JUNCTION", "ADD_CROSSING", "MOVE_TEXT", "SET_REGION"
+            ]
+          },
+          "ir_path": {"type": "string", "pattern": "^/"},
+          "description": {"type": "string", "minLength": 1},
+          "difference_id": {"type": "string", "minLength": 1},
+          "before_exists": {"type": "boolean"},
+          "after_exists": {"type": "boolean"},
+          "before": {},
+          "after": {}
+        }
+      }
+    }
+  }
+}

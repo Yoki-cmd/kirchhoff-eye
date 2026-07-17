@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kirchhoff-eye"
-version = "0.2.0"
-description = "AI-assisted circuit redrawing with a deterministic JSON IR and circuitikz backend."
+version = "0.3.0"
+description = "IR-driven circuit drawing Agent Skill with deterministic review and circuitikz workflows."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }

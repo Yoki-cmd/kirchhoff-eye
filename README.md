@@ -16,7 +16,7 @@
 
 ---
 
-Kirchhoff-eye is an AI-assisted circuit-redrawing workflow with a deterministic backend. You inspect a printed or software-exported schematic, author or review a topology-aware JSON IR, then let the toolchain validate it, serialize it to `circuitikz`, render normal and debug views, and prepare comparison artifacts.
+Kirchhoff-eye is an IR-driven circuit-drawing Agent Skill with a deterministic backend. Image redraw is its first mature workflow, while natural-language briefs, netlists, edit requests, review, repair, approval, and direct rendering share the same canonical JSON IR boundary.
 
 The point is not to trace every pixel. The point is to preserve the circuit.
 
@@ -32,10 +32,10 @@ Kirchhoff-eye treats the diagram as a graph with geometry:
 | Recognizable composition | Relative placement, regions, buses, major routes, meaningful bends |
 | Repeatability | Canonical JSON IR, schema validation, deterministic serialization |
 | Reviewability | Debug grids, component anchors, IDs, layout reports, source comparisons |
-| Honest uncertainty | Explicit `unknowns` and a `needs_human` delivery state |
+| Honest uncertainty | Explicit `valid`, `needs_review`, `needs_human`, and `approved` states |
 
 > [!IMPORTANT]
-> The public v0.2 repository does not ship an autonomous arbitrary-image-to-IR recognizer. Image understanding remains an AI/human review step. Once the IR exists, the validation, rendering, scoring, and delivery pipeline is repeatable.
+> The public v0.3 repository does not ship an autonomous arbitrary-image/prose/netlist-to-IR recognizer. Input interpretation remains an Agent/human review step. Once the IR exists, the validation, rendering, review-state, scoring, and delivery pipeline is repeatable.
 
 ## See the output
 
@@ -108,10 +108,11 @@ kirchhoff-eye doctor
 kirchhoff-eye build circuit.ir.json --source source.png --out out/job
 ```
 
-A successful build produces:
+A source-backed build opens review round 1 and produces:
 
 ```text
 out/job/
+├── circuit.ir.json
 ├── circuit.tex
 ├── circuit.debug.tex
 ├── circuit.png
@@ -119,11 +120,53 @@ out/job/
 ├── validation.json
 ├── layout_report.json
 ├── review.json
-├── comparison.png        # when --source is provided
+├── compare.png           # latest comparison compatibility alias
+├── cmp_round1.png        # immutable round comparison
+├── rounds/round-01/      # immutable round snapshot
+├── FEEDBACK.md
 └── DELIVERY.md
 ```
 
-Exit codes are stable: `0=ok`, `1=needs_human`, `2=canonical or generation error`, `3=environment or I/O error`.
+Exit codes describe command execution, not workflow completeness: `0=command completed and state was written`, `2=canonical/review/generation input error`, `3=environment or I/O error`. Read `review.json:status` for `valid / needs_review / needs_human / approved`.
+
+State meaning is explicit:
+
+- `valid`: canonical IR and deterministic artifacts are valid; no source-fidelity approval is implied;
+- `needs_review`: a source comparison exists and still needs per-region review or explicit approval;
+- `needs_human`: explicit blocking ambiguity (`unknowns`), convergence stop rules, or the round limit block approval; ordinary validator/layout recommendations remain diagnostics;
+- `approved`: a complete, zero-difference region review was explicitly approved.
+
+Record a complete region review, then approve it:
+
+```bash
+kirchhoff-eye review out/job round-review.json
+kirchhoff-eye approve out/job --note "checked against source"
+```
+
+If differences remain, an Agent edits the canonical IR, records at most five patch operations, and opens the next round:
+
+```bash
+kirchhoff-eye repair out/job repaired.ir.json --patches patches.json
+```
+
+`config.json:max_rounds` is enforced by this production state machine. It also stops after two reviewed rounds whose difference count does not fall, or freezes an IR path after its third verified patch. Reviewed rounds are immutable. Every repair operation must cite a current `difference_id`; the backend verifies the declared IR path and operation against the actual canonical before/after change and records document SHA-256 hashes. `review.json` keeps every reviewed round and verified patch log; each round also has an immutable snapshot under `rounds/`.
+
+## Agent task router
+
+All supported tasks terminate at the canonical IR. The CLI does not pretend to turn arbitrary prose, netlists, or images into correct IR autonomously; an Agent authors or reviews the IR, while the deterministic backend records provenance and produces/verifies artifacts.
+
+```bash
+kirchhoff-eye task redraw-image source.png reviewed.ir.json --out out/redraw
+kirchhoff-eye task draw-from-description brief.txt authored.ir.json --out out/from-brief
+kirchhoff-eye task draw-from-netlist input.cir authored.ir.json --out out/from-netlist
+kirchhoff-eye task edit-ir edit-request.txt edited.ir.json --out out/edit
+kirchhoff-eye task render circuit.ir.json --out out/render
+kirchhoff-eye task review out/redraw round-review.json
+kirchhoff-eye task repair out/redraw repaired.ir.json --patches patches.json
+kirchhoff-eye task approve out/redraw
+```
+
+The review and patch input contracts are machine-readable at `schemas/review.schema.json` and `schemas/patch-operations.schema.json`.
 
 ## Review without guessing
 
@@ -151,7 +194,11 @@ The package CLI handles the production path. The underlying scripts remain avail
 
 | Command | Purpose |
 |---|---|
-| `kirchhoff-eye build IR --source IMAGE --out DIR` | Run validation, serialization, rendering, layout checks, comparison, and delivery |
+| `kirchhoff-eye build IR --source IMAGE --out DIR` | Build canonical IR artifacts; with a source, open a `needs_review` round |
+| `kirchhoff-eye review JOB REVIEW.json` | Record exactly one conclusion for every IR region and a structured difference table |
+| `kirchhoff-eye repair JOB IR --patches PATCHES.json` | Generate the next round and persist the applied patch log |
+| `kirchhoff-eye approve JOB` | Explicitly approve a clean reviewed round |
+| `kirchhoff-eye task ...` | Route redraw, description, netlist, edit, review, repair, render, and approval tasks through canonical IR |
 | `kirchhoff-eye labels apply IR POSITIONS -o OUTPUT` | Apply reviewed absolute label coordinates |
 | `kirchhoff-eye doctor --json` | Audit the local runtime and rendering toolchain |
 | `python scripts/validate_ir.py IR --phase full --json` | Validate schema, geometry, topology, and semantics |

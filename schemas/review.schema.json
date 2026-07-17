@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kirchhoff-round-review-1.0.schema.json",
+  "title": "kirchhoff-round-review/1.0",
+  "type": "object",
+  "required": ["round", "regions", "differences"],
+  "additionalProperties": false,
+  "properties": {
+    "round": {"type": "integer", "minimum": 1},
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "conclusion", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "conclusion": {"enum": ["no_difference", "differences"]},
+          "summary": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "differences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "location", "category", "description", "patch_operation", "ir_path"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "location": {"type": "string", "minLength": 1},
+          "category": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "patch_operation": {
+            "enum": [
+              "ADD_COMPONENT", "REMOVE_COMPONENT", "CHANGE_TYPE", "MOVE", "ROTATE",
+              "MIRROR", "SET_VALUE", "SET_LABEL", "SET_LABEL_SIDE", "SET_LABEL_AT",
+              "REWIRE", "ADD_WIRE", "REMOVE_WIRE", "SET_WAYPOINTS", "ADD_JUNCTION",
+              "REMOVE_JUNCTION", "ADD_CROSSING", "MOVE_TEXT", "SET_REGION"
+            ]
+          },
+          "ir_path": {"type": "string", "pattern": "^/"},
+          "evidence": {"type": "string"}
+        }
+      }
+    }
+  }
+}
