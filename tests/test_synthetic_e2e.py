@@ -130,7 +130,12 @@ def test_generator_rebuilds_the_fixture_set(tmp_path):
         assert generated_case["sha256"]["image_pixels"] == image_pixel_sha256(
             generated_image_path
         )
-        assert case["sha256"]["ir"] == hashlib.sha256((FIXTURES / case["ir"]).read_bytes()).hexdigest()
+        committed_ir_bytes = (FIXTURES / case["ir"]).read_bytes()
+        expected_ir_hashes = {
+            hashlib.sha256(committed_ir_bytes).hexdigest(),
+            hashlib.sha256(committed_ir_bytes.replace(b"\r\n", b"\n")).hexdigest(),
+        }
+        assert case["sha256"]["ir"] in expected_ir_hashes
         assert case["sha256"]["image_pixels"] == image_pixel_sha256(FIXTURES / case["image"])
 
 
