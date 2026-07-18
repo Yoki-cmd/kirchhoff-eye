@@ -574,6 +574,40 @@ def test_repair_uses_unique_transaction_staging_directory(tmp_path, monkeypatch)
     assert not seen[0].exists()
 
 
+def test_repair_uses_unique_verified_patch_file(tmp_path, monkeypatch):
+    import kirchhoff_eye.pipeline as pipeline
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    review_file = tmp_path / "review.json"
+    _write_difference_review(review_file)
+    assert main(["review", str(job), str(review_file)]) == 0
+    patches = tmp_path / "patches.json"
+    _write_patches(patches, [{
+        "operation": "MOVE", "ir_path": "/components/1/label_at", "description": "调整 R1",
+    }])
+    seen = []
+    real_write = pipeline._write_json
+
+    def record_write(path, data):
+        if path.name.startswith(".verified-patches-"):
+            seen.append(path)
+        return real_write(path, data)
+
+    monkeypatch.setattr(pipeline, "_write_json", record_write)
+    assert main([
+        "repair", str(job), str(_moved_r1_ir(tmp_path / "repaired.json")),
+        "--patches", str(patches), "--dpi", "72",
+    ]) == 0
+    assert len(seen) == 1
+    assert seen[0].parent == job
+    assert not seen[0].exists()
+
+
 def test_repair_rejects_unchanged_ir_and_unverifiable_patch_log(tmp_path):
     from kirchhoff_eye.cli import main
 

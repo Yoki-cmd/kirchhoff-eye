@@ -4,6 +4,7 @@ The scripts remain directly executable CLIs, while the package avoids importing 
 names such as ``compare`` from a long-lived host process's ``sys.modules``.
 """
 from importlib.util import module_from_spec, spec_from_file_location
+import hashlib
 from pathlib import Path
 import sys
 from types import ModuleType
@@ -13,7 +14,9 @@ CORE_NAMESPACE = "kirchhoff_eye._core"
 
 
 def load_core_module(name: str, scripts_dir: Path) -> ModuleType:
-    private_name = f"{CORE_NAMESPACE}.{name}"
+    scripts_dir = scripts_dir.resolve()
+    source_id = hashlib.sha256(str(scripts_dir).encode("utf-8")).hexdigest()[:16]
+    private_name = f"{CORE_NAMESPACE}.{source_id}.{name}"
     existing = sys.modules.get(private_name)
     if existing is not None:
         return existing

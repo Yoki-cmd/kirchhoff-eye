@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1027,7 +1028,11 @@ def repair(
         candidate_ir = _read_json(Path(ir_file).resolve())
         change_evidence = _validate_patch_manifest(previous_ir, candidate_ir, state, patch_doc)
         patch_doc["change_evidence"] = change_evidence
-        verified_patches = output / ".verified-patches.json"
+        fd, verified_name = tempfile.mkstemp(
+            prefix=".verified-patches-", suffix=".json", dir=str(output)
+        )
+        os.close(fd)
+        verified_patches = Path(verified_name)
         _write_json(verified_patches, patch_doc)
         try:
             return build(

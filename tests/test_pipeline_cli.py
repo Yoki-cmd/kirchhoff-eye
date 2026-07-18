@@ -345,3 +345,21 @@ def test_pipeline_core_imports_ignore_poisoned_top_level_modules():
             sys.modules.pop("compare", None)
         else:
             sys.modules["compare"] = original
+
+
+def test_core_loader_cache_is_scoped_to_scripts_directory(tmp_path):
+    from kirchhoff_eye.core_loader import load_core_module
+
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    (first / "probe.py").write_text("VALUE = 'first'\n", encoding="utf-8")
+    (second / "probe.py").write_text("VALUE = 'second'\n", encoding="utf-8")
+
+    first_module = load_core_module("probe", first)
+    second_module = load_core_module("probe", second)
+
+    assert first_module.VALUE == "first"
+    assert second_module.VALUE == "second"
+    assert first_module is not second_module
