@@ -71,8 +71,8 @@ def test_render_matching_debug_tex_compiles_in_parallel(tmp_path, monkeypatch):
         return 0
 
     def fake_pdftoppm(_pdf_path, out_png, _dpi, _timeout):
-        generated = Path(str(out_png)[:-4] if str(out_png).lower().endswith(".png") else str(out_png))
-        generated = generated.with_suffix(".png")
+        base = str(out_png)[:-4] if str(out_png).lower().endswith(".png") else str(out_png)
+        generated = Path(base + ".png")
         generated.write_bytes(b"png")
         return 0, str(generated)
 
