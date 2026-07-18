@@ -4,13 +4,43 @@
 用例基座 = 金样 A/B（已知干净），每例做最小变异后断言：
 (a) 目标错误码出现 (b) 退出码符合 0/1/2 约定。
 """
+import json
+from pathlib import Path
+
 import pytest
 
 import irlib
+import validate_ir
 from conftest import codes
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 # ---------------------------------------------------------------- 基线
+
+def test_validate_document_reuses_preloaded_core_resources(golden_a, monkeypatch):
+    monkeypatch.setattr(validate_ir.irlib, "load_schema", lambda: (_ for _ in ()).throw(
+        AssertionError("validate_document should use caller-provided schema")
+    ))
+    monkeypatch.setattr(validate_ir.irlib, "load_anchors", lambda: (_ for _ in ()).throw(
+        AssertionError("validate_document should use caller-provided anchors")
+    ))
+    schema = json.loads((ROOT / "schemas" / "ir.schema.json").read_text(encoding="utf-8"))
+    anchors = json.loads((ROOT / "templates" / "anchors.json").read_text(encoding="utf-8"))
+
+    result = validate_ir.validate_document(golden_a, phase="full", schema=schema, anchors=anchors)
+
+    assert result.report.exit_code() == 0
+    assert result.model.ir is golden_a
+
+
+def test_declared_ir_extensions_are_schema_valid(golden_a, vrun):
+    golden_a["extensions"] = [
+        "component-scale/1", "label-gap/1", "current-arrows/1",
+    ]
+    rc, out = vrun(golden_a)
+    assert rc == 0 and out["findings"] == []
 
 def test_golden_a_clean(golden_a, vrun):
     rc, out = vrun(golden_a)

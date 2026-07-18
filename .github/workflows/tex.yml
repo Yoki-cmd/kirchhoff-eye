@@ -62,8 +62,11 @@ jobs:
       - name: Run pipeline smoke test
         run: python -m pytest tests/test_pipeline_cli.py::test_build_valid_ir_without_source_creates_complete_artifacts -q
 
+      - name: Run review workflow integration
+        run: python -m pytest tests/test_review_workflow.py -q
+
       - name: Run synthetic fixture integration
-        run: python -m pytest tests/test_synthetic_e2e.py -q
+        run: python -m pytest tests/test_synthetic_e2e.py -q -n auto
 
       - name: Compile CJK text with LuaLaTeX
         run: python -m pytest tests/test_ir2tikz.py::test_cjk_text_compiles_with_lualatex -q

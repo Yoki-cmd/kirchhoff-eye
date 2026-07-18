@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """render / compare / crop 测试：真实小编译 + 合成图 + 错误路径。"""
 import subprocess
+import threading
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -32,6 +34,7 @@ def test_pick_engine_ignores_comments():
     assert render.pick_engine("\\node {电阻}; % 注释", "auto") == "lualatex"
 
 
+@pytest.mark.tex
 def test_render_ok(tmp_path):
     tex = tmp_path / "t.tex"
     tex.write_text(TINY_TEX, encoding="utf-8")
@@ -41,6 +44,7 @@ def test_render_ok(tmp_path):
     assert im.width > 50 and im.height > 10
 
 
+@pytest.mark.tex
 def test_render_also_renders_matching_debug_tex(tmp_path):
     tex = tmp_path / "circuit.tex"
     debug_tex = tmp_path / "circuit.debug.tex"
@@ -51,6 +55,35 @@ def test_render_also_renders_matching_debug_tex(tmp_path):
     assert (tmp_path / "circuit.debug.png").exists()
 
 
+def test_render_matching_debug_tex_compiles_in_parallel(tmp_path, monkeypatch):
+    tex = tmp_path / "circuit.tex"
+    debug_tex = tmp_path / "circuit.debug.tex"
+    tex.write_text(TINY_TEX, encoding="utf-8")
+    debug_tex.write_text(TINY_TEX, encoding="utf-8")
+    out = tmp_path / "circuit.png"
+    barrier = threading.Barrier(2, timeout=1)
+    compiled = []
+
+    def concurrent_latex(_engine, tex_path, _timeout):
+        compiled.append(Path(tex_path).name)
+        barrier.wait()
+        Path(tex_path).with_suffix(".pdf").write_bytes(b"pdf")
+        return 0
+
+    def fake_pdftoppm(_pdf_path, out_png, _dpi, _timeout):
+        generated = Path(str(out_png)[:-4] if str(out_png).lower().endswith(".png") else str(out_png))
+        generated = generated.with_suffix(".png")
+        generated.write_bytes(b"png")
+        return 0, str(generated)
+
+    monkeypatch.setattr(render, "run_latex", concurrent_latex)
+    monkeypatch.setattr(render, "run_pdftoppm", fake_pdftoppm)
+
+    assert render.main([str(tex), "-o", str(out)]) == 0
+    assert sorted(compiled) == ["circuit.debug.tex", "circuit.tex"]
+
+
+@pytest.mark.tex
 def test_render_compile_fail(tmp_path, capsys):
     tex = tmp_path / "bad.tex"
     tex.write_text(BAD_TEX, encoding="utf-8")

@@ -1,5 +1,6 @@
 {
   "version": "kirchhoff-ir/1.0",
+  "extensions": ["component-scale/1", "label-gap/1", "current-arrows/1"],
   "meta": {
     "source_image": "source.png",
     "title": "",

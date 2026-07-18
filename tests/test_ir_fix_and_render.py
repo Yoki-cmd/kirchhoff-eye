@@ -53,3 +53,18 @@ def test_layout_check_ir_propagates_non_e004_geometry_errors(tmp_path, golden_b)
     assert proc.returncode == 2
     report = json.loads(ir_path.with_suffix(".layout_report.json").read_text(encoding="utf-8"))
     assert any(f["code"] == "E013" for f in report["findings"])
+
+
+def test_layout_report_from_validated_ir_does_not_reload_document(golden_b, monkeypatch):
+    import ir_fix_and_render
+    import validate_ir
+
+    validated = validate_ir.validate_document(golden_b, phase="full")
+    monkeypatch.setattr(ir_fix_and_render.irlib, "load_json", lambda *_a, **_k: (_ for _ in ()).throw(
+        AssertionError("validated layout should not reload IR")
+    ))
+
+    report = ir_fix_and_render.layout_report_from_validated(validated)
+
+    assert report["status"] == "ok"
+    assert report["errors"] == 0

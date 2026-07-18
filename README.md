@@ -262,17 +262,29 @@ The repository runs the same public verification gates on GitHub:
 - all 20 synthetic IR/image fixtures;
 - CJK compilation through LuaLaTeX.
 
-Run the complete suite locally:
+Run the fast default suite locally (no real TeX and no full synthetic acceptance):
 
 ```bash
-python -m pytest tests -q
+python -m pytest tests -q -m "not tex and not synthetic"
+```
+
+Run real TeX/workflow integration separately:
+
+```bash
+python -m pytest tests -q -m tex
 ```
 
 Regenerate and inspect the public fixtures:
 
 ```bash
 python scripts/generate_synthetic_fixture.py --out tests/fixtures --dpi 72
-python -m pytest tests/test_synthetic_e2e.py -q
+python -m pytest tests/test_synthetic_e2e.py -q -n auto
+```
+
+Measure the source-backed production pipeline with its persisted per-stage timings:
+
+```bash
+python benchmark/perf/benchmark_pipeline.py --runs 5 --warmup 1 --json
 ```
 
 ## Project map

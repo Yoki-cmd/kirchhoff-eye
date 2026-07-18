@@ -8,6 +8,13 @@
   "additionalProperties": false,
   "properties": {
     "version": { "const": "kirchhoff-ir/1.0" },
+    "extensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["component-scale/1", "label-gap/1", "current-arrows/1"]
+      }
+    },
     "meta": {
       "type": "object",
       "required": ["source_image", "title", "grid", "canvas"],

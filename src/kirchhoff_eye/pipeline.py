@@ -7,10 +7,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import jsonschema
+
+from .core_loader import load_core_module
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -20,6 +23,26 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 SCHEMAS_DIR = PROJECT_ROOT / "schemas"
 TEMPLATES_DIR = PROJECT_ROOT / "templates"
 CONFIG_PATH = PROJECT_ROOT / "config.json"
+
+core_irlib = load_core_module("irlib", SCRIPTS_DIR)
+_previous_irlib = sys.modules.get("irlib")
+_previous_validate = sys.modules.get("validate_ir")
+try:
+    sys.modules["irlib"] = core_irlib
+    core_validate = load_core_module("validate_ir", SCRIPTS_DIR)
+    sys.modules["validate_ir"] = core_validate
+    core_ir2tikz = load_core_module("ir2tikz", SCRIPTS_DIR)
+    core_layout = load_core_module("ir_fix_and_render", SCRIPTS_DIR)
+    core_compare = load_core_module("compare", SCRIPTS_DIR)
+finally:
+    if _previous_validate is None:
+        sys.modules.pop("validate_ir", None)
+    else:
+        sys.modules["validate_ir"] = _previous_validate
+    if _previous_irlib is None:
+        sys.modules.pop("irlib", None)
+    else:
+        sys.modules["irlib"] = _previous_irlib
 
 EXIT_OK = 0
 EXIT_NEEDS_HUMAN = 1
@@ -57,6 +80,39 @@ def _run(script: str, args: Sequence[str]) -> Tuple[int, str, str]:
         errors="replace",
     )
     return proc.returncode, proc.stdout, proc.stderr
+
+
+def _stage_timer(timings: Dict[str, float], name: str):
+    class StageTimer:
+        def __enter__(self):
+            self.started = time.perf_counter()
+            return self
+
+        def __exit__(self, _exc_type, _exc, _tb):
+            timings[name] = time.perf_counter() - self.started
+
+    return StageTimer()
+
+
+def _validate_ir_in_process(ir: Any) -> Tuple[Any, Dict[str, Any]]:
+    validated = core_validate.validate_document(ir, phase="full")
+    report = json.loads(validated.report.to_json({"phase": "full"}))
+    return validated, report
+
+
+def _serialize_in_process(validated: Any, output: Path) -> None:
+    core_ir2tikz.serialize_validated(validated, output)
+
+
+def _layout_in_process(validated: Any, ir_path: Path) -> Dict[str, Any]:
+    return core_layout.layout_report_from_validated(validated, file_name=str(ir_path))
+
+
+def _compare_in_process(source: Path, rendered: Path, output: Path) -> None:
+    original_image = core_compare.load_rgb(str(source))
+    rendered_image = core_compare.load_rgb(str(rendered))
+    height = core_irlib.load_config().get("compare", {}).get("side_height_px", 1200)
+    core_compare.make_side(original_image, rendered_image, height).save(str(output))
 
 
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
@@ -311,17 +367,27 @@ def _patch_path_reason(rounds: Sequence[Dict[str, Any]]) -> Optional[str]:
 def _derive_initial_workflow_state(
     validation: Dict[str, Any], layout: Dict[str, Any], include_source: bool
 ) -> Tuple[str, List[str]]:
-    validation_codes = {
-        finding.get("code") for finding in validation.get("findings", [])
+    validation_warnings = [
+        finding for finding in validation.get("findings", [])
         if finding.get("severity") == "W"
-    }
-    layout_codes = {
-        finding.get("code") for finding in layout.get("findings", [])
+    ]
+    layout_warnings = [
+        finding for finding in layout.get("findings", [])
         if finding.get("severity") == "W"
-    }
+    ]
+    validation_codes = {finding.get("code") for finding in validation_warnings}
+    layout_codes = {finding.get("code") for finding in layout_warnings}
     reasons: List[str] = []
     if "W108" in validation_codes:
         reasons.append("blocking_unknown")
+    if "W103" in validation_codes | layout_codes:
+        reasons.append("blocking_pose_warning")
+    if any(
+        finding.get("code") == "E003"
+        and str(finding.get("path", "")).startswith(("/components/", "/wires/"))
+        for finding in validation_warnings + layout_warnings
+    ):
+        reasons.append("blocking_alignment_warning")
     if any(code and code.startswith("BLOCKING_") for code in validation_codes | layout_codes):
         reasons.append("blocking_ambiguity")
     if reasons:
@@ -459,6 +525,10 @@ def _publish_stage(stage: Path, output: Path, round_number: int) -> None:
     snapshot = stage / "rounds" / f"round-{round_number:02d}"
     if snapshot.is_dir():
         relative_paths.extend(path.relative_to(stage) for path in snapshot.rglob("*") if path.is_file())
+    _publish_relative_paths(stage, output, relative_paths)
+
+
+def _publish_relative_paths(stage: Path, output: Path, relative_paths: Sequence[Path]) -> None:
     backup = Path(tempfile.mkdtemp(prefix="kirchhoff-publish-", dir=str(output.parent)))
     existing = set()
     try:
@@ -477,10 +547,19 @@ def _publish_stage(stage: Path, output: Path, round_number: int) -> None:
                 _atomic_copy(saved, target)
             else:
                 target.unlink(missing_ok=True)
-        shutil.rmtree(output / "rounds" / f"round-{round_number:02d}", ignore_errors=True)
         raise
     finally:
         shutil.rmtree(backup, ignore_errors=True)
+
+
+def _publish_state_and_delivery(output: Path, state: Dict[str, Any]) -> None:
+    stage = Path(tempfile.mkdtemp(prefix="kirchhoff-state-", dir=str(output.parent)))
+    try:
+        _write_json(stage / "review.json", state)
+        _write_delivery(stage, state)
+        _publish_relative_paths(stage, output, [Path("review.json"), Path("DELIVERY.md")])
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
 
 
 def _validate_document(data: Dict[str, Any], schema_name: str) -> None:
@@ -647,6 +726,7 @@ def _build(
     preserve_history: bool = False,
     patches_file: Optional[str] = None,
 ) -> int:
+    build_started = time.perf_counter()
     source_ir = Path(ir_file).resolve()
     output = Path(out_dir).resolve()
     previous: Optional[Dict[str, Any]] = None
@@ -657,14 +737,16 @@ def _build(
         if previous["current_round"] >= max_rounds:
             raise ValueError("max_rounds reached; no additional repair round is allowed")
     round_number = previous["current_round"] + 1 if previous else 1
-    work_output = output / ".next-round" if preserve_history else output
+    work_output = (
+        Path(tempfile.mkdtemp(prefix=".next-round-", dir=str(output)))
+        if preserve_history else output
+    )
     work_ir = work_output / "circuit.ir.json"
     try:
         output.mkdir(parents=True, exist_ok=True)
         if not preserve_history:
             _clear_generated_artifacts(output)
         else:
-            shutil.rmtree(work_output, ignore_errors=True)
             work_output.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_ir, work_ir)
         if source is not None:
@@ -686,51 +768,49 @@ def _build(
             sys.stderr.write(message)
         return code
 
-    rc, stdout, stderr = _run(
-        "validate_ir.py", [str(work_ir), "--phase", "full", "--json"]
-    )
-    if rc == EXIT_ENV:
-        return abort(EXIT_ENV, stderr or stdout)
-    validation = _load_json_output(stdout, "validate_ir.py")
-    _write_json(work_output / "validation.json", validation)
-    if rc == EXIT_ERROR:
+    timings: Dict[str, float] = {}
+    try:
+        ir_document = json.loads(work_ir.read_text(encoding="utf-8"))
+        with _stage_timer(timings, "validation"):
+            validated, validation = _validate_ir_in_process(ir_document)
+        _write_json(work_output / "validation.json", validation)
+    except (OSError, ValueError, jsonschema.ValidationError) as exc:
+        return abort(EXIT_ENV, f"ERROR: validation failed: {exc}\n")
+    if validated.report.exit_code() == EXIT_ERROR:
         return abort(EXIT_ERROR)
 
     tex = work_output / "circuit.tex"
-    rc, stdout, stderr = _run("ir2tikz.py", [str(work_ir), "-o", str(tex)])
-    if rc != EXIT_OK:
-        return abort(EXIT_ENV if rc == EXIT_ENV else EXIT_ERROR, stderr or stdout)
+    try:
+        with _stage_timer(timings, "serialization"):
+            _serialize_in_process(validated, tex)
+    except (OSError, ValueError) as exc:
+        return abort(EXIT_ENV, f"ERROR: serialization failed: {exc}\n")
 
     png = work_output / "circuit.png"
-    rc, stdout, stderr = _run(
-        "render.py", [str(tex), "-o", str(png), "--dpi", str(dpi)]
-    )
+    with _stage_timer(timings, "render"):
+        rc, stdout, stderr = _run(
+            "render.py", [str(tex), "-o", str(png), "--dpi", str(dpi)]
+        )
     if rc != EXIT_OK:
         return abort(EXIT_ENV if rc == EXIT_ENV else EXIT_ERROR, stderr or stdout)
 
-    rc, stdout, stderr = _run(
-        "ir_fix_and_render.py", [str(work_ir), "--layout-check", "--json"]
-    )
-    source_layout = work_ir.with_suffix(".layout_report.json")
-    if source_layout.exists():
-        source_layout.replace(work_output / "layout_report.json")
-    else:
-        return abort(EXIT_ENV, stderr or stdout or "ERROR: layout report was not generated\n")
-    layout = _read_json(work_output / "layout_report.json")
-    if rc == EXIT_ERROR:
+    try:
+        with _stage_timer(timings, "layout"):
+            layout = _layout_in_process(validated, work_ir)
+        _write_json(work_output / "layout_report.json", layout)
+    except (OSError, ValueError) as exc:
+        return abort(EXIT_ENV, f"ERROR: layout check failed: {exc}\n")
+    if layout["errors"]:
         return abort(EXIT_ERROR)
-    if rc not in (EXIT_OK, EXIT_NEEDS_HUMAN):
-        return abort(EXIT_ENV)
 
     include_source = source is not None or (preserve_history and (output / "source.png").exists())
     if include_source:
         compare = work_output / f"cmp_round{round_number}.png"
-        rc, stdout, stderr = _run(
-            "compare.py",
-            [str(work_output / "source.png"), str(png), "-o", str(compare)],
-        )
-        if rc != EXIT_OK:
-            return abort(EXIT_ENV, stderr or stdout)
+        try:
+            with _stage_timer(timings, "compare"):
+                _compare_in_process(work_output / "source.png", png, compare)
+        except (OSError, ValueError) as exc:
+            return abort(EXIT_ENV, f"ERROR: compare failed: {exc}\n")
 
     if include_source:
         shutil.copy2(work_output / f"cmp_round{round_number}.png", work_output / "compare.png")
@@ -794,6 +874,7 @@ def _build(
         "reason_codes": reason_codes,
         "rounds": rounds,
         "artifacts": artifacts,
+        "timings": {**timings, "total": time.perf_counter() - build_started},
     }
     frozen_reason = _patch_path_reason(rounds)
     if frozen_reason is not None:
@@ -870,8 +951,8 @@ def review(job_dir: str, review_file: str) -> int:
             state["status"] = "needs_human"
         else:
             state["status"] = "needs_review"
-        _write_json(output / "review.json", state)
-        _write_delivery(output, state)
+        _validate_document(state, "review-state.schema.json")
+        _publish_state_and_delivery(output, state)
         return _status_exit(state["status"])
     except (OSError, RuntimeError) as exc:
         sys.stderr.write(f"ERROR: review environment failure: {exc}\n")
@@ -884,8 +965,6 @@ def review(job_dir: str, review_file: str) -> int:
 def approve(job_dir: str, note: str = "") -> int:
     try:
         output, state = _load_state(job_dir)
-        if state["status"] == "approved":
-            return EXIT_OK
         latest = state["rounds"][-1]
         if not state.get("review_required") or not latest.get("reviewed"):
             raise ValueError("job is not ready for approval; complete a clean region review first")
@@ -902,12 +981,15 @@ def approve(job_dir: str, note: str = "") -> int:
             raise ValueError("source evidence differs from the reviewed source")
         if comparison_hash != latest.get("reviewed_comparison_sha256"):
             raise ValueError("comparison evidence differs from the reviewed comparison")
+        if state["status"] == "approved":
+            if state.get("approval", {}).get("ir_sha256") != live_ir_hash:
+                raise ValueError("approved IR hash differs from live circuit IR")
+            return EXIT_OK
         state["status"] = "approved"
         state["approval"] = {"note": note, "ir_sha256": live_ir_hash}
         state["ready_for_approval"] = False
         _validate_document(state, "review-state.schema.json")
-        _write_json(output / "review.json", state)
-        _write_delivery(output, state)
+        _publish_state_and_delivery(output, state)
         return EXIT_OK
     except (OSError, RuntimeError, json.JSONDecodeError) as exc:
         sys.stderr.write(f"ERROR: approval environment failure: {exc}\n")

@@ -10,6 +10,7 @@
 import json
 import math
 import os
+from functools import lru_cache
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
@@ -23,8 +24,13 @@ SNAP = 0.5
 
 # 元件类型词表的单一真源 = catalog/components.json。以下集合全部由它派生
 # （kind / invert / variants / tikz key），取代旧的手写 frozenset —— 新增元件只改目录。
-with open(CATALOG_PATH, "r", encoding="utf-8") as _cf:
-    COMPONENTS = json.load(_cf)["components"]
+@lru_cache(maxsize=None)
+def load_catalog():
+    with open(CATALOG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+COMPONENTS = load_catalog()["components"]
 
 TWO_TERMINAL_TYPES = frozenset(t for t, v in COMPONENTS.items() if v["kind"] == "two")
 MULTI_TYPES = frozenset(t for t, v in COMPONENTS.items() if v["kind"] == "multi")
@@ -70,14 +76,17 @@ def load_json(path):
         return json.load(f)
 
 
+@lru_cache(maxsize=None)
 def load_schema():
     return load_json(SCHEMA_PATH)
 
 
+@lru_cache(maxsize=None)
 def load_anchors():
     return load_json(ANCHORS_PATH)
 
 
+@lru_cache(maxsize=None)
 def load_config():
     return load_json(CONFIG_PATH)
 

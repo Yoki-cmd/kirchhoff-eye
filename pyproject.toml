@@ -19,6 +19,7 @@ dependencies = [
 dev = [
   "coverage>=7",
   "pytest>=8",
+  "pytest-xdist>=3",
   "tomli>=2; python_version < '3.11'",
 ]
 
@@ -39,3 +40,7 @@ packages = ["src/kirchhoff_eye"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+markers = [
+  "tex: requires a real TeX engine or rasterizer",
+  "synthetic: full public synthetic fixture generation/build acceptance",
+]

@@ -13,6 +13,9 @@ phase 与感知遍次对应（§8.2）：
 """
 import argparse
 import sys
+from dataclasses import dataclass
+from functools import lru_cache
+from typing import Optional
 
 import jsonschema
 
@@ -27,13 +30,42 @@ SAFE_TEX_COMMANDS = frozenset({
 SAFE_TEX_SINGLE_CHAR_COMMANDS = frozenset(",")
 
 
+@dataclass(frozen=True)
+class ValidatedIR:
+    document: dict
+    model: Optional[IRModel]
+    geometry: Optional[GeomIndex]
+    report: Report
+    phase: str
+
+
+@lru_cache(maxsize=None)
+def _default_schema_validator():
+    return jsonschema.Draft7Validator(irlib.load_schema())
+
+
+def validate_document(ir, phase="full", schema=None, anchors=None):
+    if phase not in PHASES:
+        raise ValueError("unknown validation phase: %s" % phase)
+    validator = _default_schema_validator() if schema is None else jsonschema.Draft7Validator(schema)
+    schema = schema if schema is not None else irlib.load_schema()
+    anchors = anchors if anchors is not None else irlib.load_anchors()
+    report = Report()
+    model = None
+    geometry = None
+    if check_schema(report, ir, schema, validator=validator):
+        model = IRModel(ir, anchors)
+        geometry = run_checks(report, model, ir, phase)
+    return ValidatedIR(ir, model, geometry, report, phase)
+
+
 def jptr(*parts):
     return "/" + "/".join(str(p) for p in parts)
 
 
 # ---------------------------------------------------------------- E001
 
-def check_schema(report, ir, schema):
+def check_schema(report, ir, schema, validator=None):
     """E001：结构不合法 / type 不在词表。返回是否可继续深查。"""
     known = irlib.TWO_TERMINAL_TYPES | irlib.MULTI_TYPES | irlib.SINGLE_TYPES
     bad_type_idx = set()
@@ -44,7 +76,7 @@ def check_schema(report, ir, schema):
                        "type %r 不在 v1 词表" % comp.get("type"),
                        "词表见 references/ir-schema.md §3.4；词表外符号禁止顶替，"
                        "改走 unknowns 条目（UNKNOWN 协议，ir-schema.md §8）")
-    validator = jsonschema.Draft7Validator(schema)
+    validator = validator or jsonschema.Draft7Validator(schema)
     for err in sorted(validator.iter_errors(ir), key=lambda e: list(e.absolute_path)):
         path = list(err.absolute_path)
         if len(path) >= 2 and path[0] == "components" and path[1] in bad_type_idx:
@@ -716,7 +748,7 @@ def run_checks(report, model, ir, phase):
     check_region_coverage(report, model, ir)
     check_unknowns_status(report, model, ir)
     if phase == "skeleton":
-        return
+        return None
     geom = GeomIndex(model)
     check_wire_orthogonal(report, model, ir)
     check_markers_on_wires(report, model, ir, geom)
@@ -724,12 +756,13 @@ def run_checks(report, model, ir, phase):
     check_ambiguous_touch(report, model, ir, geom)
     check_pose_observation(report, model, ir)
     if phase == "geometry":
-        return
+        return geom
     check_topology(report, model, ir, geom)
     check_crossings_declared(report, model, ir, geom)
     check_dangling(report, model, ir, geom)
     check_junction_confluence(report, model, ir, geom)
     check_nets_ledger(report, model, ir, geom)
+    return geom
 
 
 def main(argv=None):
@@ -748,10 +781,8 @@ def main(argv=None):
         sys.stderr.write("ERROR: 无法读取输入: %s\n" % e)
         return irlib.EXIT_ENV
 
-    report = Report()
-    if check_schema(report, ir, schema):
-        model = IRModel(ir, anchors)
-        run_checks(report, model, ir, args.phase)
+    validated = validate_document(ir, args.phase, schema=schema, anchors=anchors)
+    report = validated.report
 
     out = report.to_json({"phase": args.phase}) if args.json else report.to_text()
     sys.stdout.write(out + "\n")

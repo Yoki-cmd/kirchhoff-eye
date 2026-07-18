@@ -67,7 +67,8 @@ junction/crossing/unknown”做显式断言，而不是漏写。
 
 ### 3.1a v1.1 可选字段（三类元件通用规则）
 
-全部**可选，缺省 ⇒ 与 v1.0 输出逐字节相同**（纯增量，`version` 常量不变）：
+全部**可选，缺省 ⇒ 与 v1.0 输出逐字节相同**（纯增量，`version` 常量不变）。新文档使用
+这些字段时应在顶层 `extensions` 声明对应能力；旧文档为兼容可省略：
 
 - `scale`：数值 ∈ [0.5, 2.0] 且 0.25 步进（`multipleOf`，二进制精确）。语义 = 符号整体
   均匀缩放。两端件序列化为 per-instance `/tikz/circuitikz/bipoles/length=基数×scale`

@@ -3,9 +3,14 @@
 import json
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_A = ROOT / "tests" / "golden" / "A" / "ir.json"
+
+
+pytestmark = pytest.mark.tex
 
 
 def test_build_valid_ir_without_source_creates_complete_artifacts(tmp_path):
@@ -42,6 +47,8 @@ def test_build_valid_ir_without_source_creates_complete_artifacts(tmp_path):
     assert review["task"]["kind"] == "render"
     assert review["current_round"] == 1
     assert review["max_rounds"] == 3
+    assert set(review["timings"]) == {"validation", "serialization", "render", "layout", "total"}
+    assert review["timings"]["total"] >= review["timings"]["render"]
     assert review["artifacts"]["circuit_png"] == str((out / "circuit.png").resolve())
     assert str((out / "circuit.ir.json").resolve()) in delivery
     assert "compare_png" not in review["artifacts"]
@@ -194,6 +201,19 @@ def test_build_invalid_ir_returns_canonical_error_and_stops(tmp_path):
     assert not (out / "review.json").exists()
 
 
+@pytest.mark.parametrize("payload", [[], "text", None])
+def test_build_non_object_ir_returns_canonical_error(tmp_path, payload):
+    import kirchhoff_eye.pipeline as pipeline
+
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text(json.dumps(payload), encoding="utf-8")
+    out = tmp_path / "job"
+
+    assert pipeline.build(str(invalid), str(out), dpi=72) == 2
+    validation = json.loads((out / "validation.json").read_text(encoding="utf-8"))
+    assert validation["status"] == "error"
+
+
 def test_reusing_output_directory_removes_stale_artifacts(tmp_path):
     from kirchhoff_eye.cli import main
 
@@ -240,16 +260,11 @@ def test_build_uncreatable_output_directory_returns_environment_error(tmp_path):
 def test_build_invalid_layout_report_returns_environment_error(tmp_path, monkeypatch):
     import kirchhoff_eye.pipeline as pipeline
 
-    real_run = pipeline._run
-
-    def corrupt_layout(script, args):
-        rc, stdout, stderr = real_run(script, args)
-        if script == "ir_fix_and_render.py":
-            Path(args[0]).with_suffix(".layout_report.json").write_text(
-                "not-json", encoding="utf-8")
-        return rc, stdout, stderr
-
-    monkeypatch.setattr(pipeline, "_run", corrupt_layout)
+    monkeypatch.setattr(
+        pipeline,
+        "_layout_in_process",
+        lambda *_args: (_ for _ in ()).throw(ValueError("invalid layout report")),
+    )
 
     assert pipeline.build(str(GOLDEN_A), str(tmp_path / "job"), dpi=72) == 3
 
@@ -286,3 +301,47 @@ def test_build_render_generation_failure_returns_canonical_error(tmp_path, monke
     rc = pipeline.build(str(GOLDEN_A), str(tmp_path / "job"), dpi=120)
 
     assert rc == 2
+
+
+def test_build_uses_in_process_python_core_stages(tmp_path, monkeypatch):
+    import kirchhoff_eye.pipeline as pipeline
+
+    real_run = pipeline._run
+    python_stages = {"validate_ir.py", "ir2tikz.py", "ir_fix_and_render.py", "compare.py"}
+
+    def reject_python_subprocess(script, args):
+        if script in python_stages:
+            raise AssertionError(f"unexpected Python subprocess stage: {script}")
+        return real_run(script, args)
+
+    monkeypatch.setattr(pipeline, "_run", reject_python_subprocess)
+
+    out = tmp_path / "job"
+    assert pipeline.build(str(GOLDEN_A), str(out), dpi=72) == 0
+    assert (out / "validation.json").exists()
+    assert (out / "circuit.debug.tex").exists()
+    assert (out / "layout_report.json").exists()
+
+
+def test_pipeline_core_imports_ignore_poisoned_top_level_modules():
+    import importlib.util
+    import sys
+    import types
+
+    pipeline_path = ROOT / "src" / "kirchhoff_eye" / "pipeline.py"
+    poisoned = types.ModuleType("compare")
+    original = sys.modules.get("compare")
+    sys.modules["compare"] = poisoned
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "kirchhoff_eye.isolated_pipeline_probe", pipeline_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        assert Path(module.core_compare.__file__).resolve() == ROOT / "scripts" / "compare.py"
+    finally:
+        if original is None:
+            sys.modules.pop("compare", None)
+        else:
+            sys.modules["compare"] = original

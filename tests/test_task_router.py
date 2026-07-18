@@ -29,6 +29,7 @@ def test_task_route_help_is_available(name, capsys):
     assert "usage:" in capsys.readouterr().out.lower()
 
 
+@pytest.mark.tex
 def test_draw_from_description_records_provenance_and_builds_canonical_ir(tmp_path):
     from kirchhoff_eye.cli import main
 
@@ -87,6 +88,7 @@ def test_review_and_repair_schemas_are_packaged_contracts():
     assert json.loads(state_schema.read_text(encoding="utf-8"))["title"] == "kirchhoff-review-state/1.0"
 
 
+@pytest.mark.tex
 def test_reusing_output_directory_removes_previous_task_input_evidence(tmp_path):
     from kirchhoff_eye.cli import main
 

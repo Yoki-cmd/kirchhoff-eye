@@ -11,6 +11,9 @@ GOLDEN_A = ROOT / "tests" / "golden" / "A" / "ir.json"
 SOURCE_A = ROOT / "tests" / "golden" / "A" / "golden.png"
 
 
+pytestmark = pytest.mark.tex
+
+
 def _write_clean_review(path, round_number=1):
     ir = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
     report = {
@@ -135,6 +138,80 @@ def test_approve_rederives_invariants_and_binds_review_to_live_ir(tmp_path):
     comparison = evidence_job / "cmp_round1.png"
     comparison.write_bytes(comparison.read_bytes() + b"tampered")
     assert main(["approve", str(evidence_job)]) == 2
+
+
+@pytest.mark.parametrize("command", ["review", "approve"])
+def test_review_and_approve_delivery_failure_rolls_back_every_job_file(
+        tmp_path, monkeypatch, command):
+    import kirchhoff_eye.pipeline as pipeline
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    clean = tmp_path / "clean-review.json"
+    _write_clean_review(clean)
+    if command == "approve":
+        assert main(["review", str(job), str(clean)]) == 0
+    before = _job_bytes(job)
+    monkeypatch.setattr(
+        pipeline, "_write_delivery",
+        lambda *_args: (_ for _ in ()).throw(OSError("injected delivery failure")),
+    )
+
+    args = ["review", str(job), str(clean)] if command == "review" else ["approve", str(job)]
+    assert main(args) == 3
+    assert _job_bytes(job) == before
+
+
+def test_repeated_approve_rechecks_live_evidence(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    clean = tmp_path / "clean-review.json"
+    _write_clean_review(clean)
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    assert main(["review", str(job), str(clean)]) == 0
+    assert main(["approve", str(job)]) == 0
+    altered = json.loads((job / "circuit.ir.json").read_text(encoding="utf-8"))
+    altered["meta"]["title"] = "tampered after approval"
+    (job / "circuit.ir.json").write_text(json.dumps(altered), encoding="utf-8")
+
+    assert main(["approve", str(job)]) == 2
+
+
+def test_w103_blocks_approval_without_warning_disposition(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    ir = json.loads((ROOT / "tests" / "golden" / "B" / "ir.json").read_text(encoding="utf-8"))
+    q1 = next(component for component in ir["components"] if component["id"] == "Q1")
+    q1["pins"][0]["at"] = [8, 8]
+    ir_path = tmp_path / "pose-warning.json"
+    ir_path.write_text(json.dumps(ir), encoding="utf-8")
+    job = tmp_path / "job"
+    assert main([
+        "build", str(ir_path), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    review_file = tmp_path / "review.json"
+    review_file.write_text(json.dumps({
+        "round": 1,
+        "regions": [
+            {"name": region["name"], "conclusion": "no_difference", "summary": "verified"}
+            for region in ir["regions"]
+        ],
+        "differences": [],
+    }), encoding="utf-8")
+
+    assert main(["review", str(job), str(review_file)]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    assert "blocking_pose_warning" in state["reason_codes"]
+    assert main(["approve", str(job)]) == 2
 
 
 def test_source_backed_empty_regions_cannot_be_reviewed_or_approved(tmp_path):
@@ -460,6 +537,41 @@ def test_repair_publish_failure_rolls_back_every_live_artifact(tmp_path, monkeyp
     assert _job_bytes(job) == before
     assert not (job / ".next-round").exists()
     assert not (job / "rounds" / "round-02").exists()
+
+
+def test_repair_uses_unique_transaction_staging_directory(tmp_path, monkeypatch):
+    import kirchhoff_eye.pipeline as pipeline
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    review_file = tmp_path / "review.json"
+    _write_difference_review(review_file)
+    assert main(["review", str(job), str(review_file)]) == 0
+    patches = tmp_path / "patches.json"
+    _write_patches(patches, [{
+        "operation": "MOVE", "ir_path": "/components/1/label_at", "description": "调整 R1",
+    }])
+    seen = []
+    real_mkdtemp = pipeline.tempfile.mkdtemp
+
+    def record_mkdtemp(*args, **kwargs):
+        path = real_mkdtemp(*args, **kwargs)
+        if kwargs.get("prefix") == ".next-round-":
+            seen.append(Path(path))
+        return path
+
+    monkeypatch.setattr(pipeline.tempfile, "mkdtemp", record_mkdtemp)
+    assert main([
+        "repair", str(job), str(_moved_r1_ir(tmp_path / "repaired.json")),
+        "--patches", str(patches), "--dpi", "72",
+    ]) == 0
+    assert len(seen) == 1
+    assert seen[0].parent == job
+    assert not seen[0].exists()
 
 
 def test_repair_rejects_unchanged_ir_and_unverifiable_patch_log(tmp_path):

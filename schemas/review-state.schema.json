@@ -53,6 +53,19 @@
       }
     },
     "artifacts": {"type": "object"},
+    "timings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation", "serialization", "render", "layout", "total"],
+      "properties": {
+        "validation": {"type": "number", "minimum": 0},
+        "serialization": {"type": "number", "minimum": 0},
+        "render": {"type": "number", "minimum": 0},
+        "layout": {"type": "number", "minimum": 0},
+        "compare": {"type": "number", "minimum": 0},
+        "total": {"type": "number", "minimum": 0}
+      }
+    },
     "approval": {
       "type": "object",
       "required": ["note", "ir_sha256"],

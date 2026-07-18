@@ -565,7 +565,20 @@ def check_pin_connectivity(wire_paths, resolver, comps):
 def layout_check_ir(ir_path, output_json=False):
     """IR-driven layout check; explicit pin refs are the connectivity truth."""
     ir = irlib.load_json(ir_path)
-    model = irlib.IRModel(ir, irlib.load_anchors())
+    import validate_ir
+    validated = validate_ir.validate_document(ir, "full")
+    report = layout_report_from_validated(validated, file_name=str(ir_path))
+    if output_json:
+        Path(ir_path).with_suffix('.layout_report.json').write_text(
+            json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    return report["findings"]
+
+
+def layout_report_from_validated(validated, file_name="<memory>"):
+    if validated.model is None:
+        raise ValueError("layout check requires a schema-valid IR")
+    ir = validated.document
+    model = validated.model
     findings = []
     connected = {
         point["pin"]
@@ -586,29 +599,23 @@ def layout_check_ir(ir_path, output_json=False):
                     "message": "引脚 %s 未被任何 wire 显式引用" % ref,
                     "hint": "在 wires[].points 中加入 {\"pin\":\"%s\"}" % ref,
                 })
-    import validate_ir
-    report = irlib.Report()
-    validate_ir.run_checks(report, model, ir, "geometry")
-    for finding in report.findings:
+    for finding in validated.report.findings:
         item = dict(finding)
         if item["code"] == "E004":
             item["rule"] = "铁律一·斜线"
         else:
             item.setdefault("rule", "IR geometry")
         findings.append(item)
-    if output_json:
-        n_E = sum(1 for f in findings if f["severity"] == "E")
-        n_W = sum(1 for f in findings if f["severity"] == "W")
-        report_path = Path(ir_path).with_suffix('.layout_report.json')
-        report_path.write_text(json.dumps({
-            'file': str(ir_path),
-            'status': 'error' if n_E else ('warn' if n_W else 'ok'),
-            'errors': n_E, 'warnings': n_W,
-            'rules_hit': sorted({f.get('rule', '') for f in findings if f.get('rule')}),
-            'findings': findings,
-            'iron_rules_version': '1.1 (IR-driven connectivity)',
-        }, indent=2, ensure_ascii=False), encoding="utf-8")
-    return findings
+    n_E = sum(1 for f in findings if f["severity"] == "E")
+    n_W = sum(1 for f in findings if f["severity"] == "W")
+    return {
+        'file': file_name,
+        'status': 'error' if n_E else ('warn' if n_W else 'ok'),
+        'errors': n_E, 'warnings': n_W,
+        'rules_hit': sorted({f.get('rule', '') for f in findings if f.get('rule')}),
+        'findings': findings,
+        'iron_rules_version': '1.1 (IR-driven connectivity)',
+    }
 
 
 # ──── layout check entry point ────

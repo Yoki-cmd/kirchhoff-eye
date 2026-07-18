@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 import ir2tikz
+import validate_ir
 
 
 def run_ir2tikz(tmp_path, ir, extra=None, name="ir.json", out="out.tex"):
@@ -19,6 +20,15 @@ def run_ir2tikz(tmp_path, ir, extra=None, name="ir.json", out="out.tex"):
 
 
 # ---------------------------------------------------------------- 金样往返
+
+def test_serialize_validated_ir_writes_normal_and_debug_tex(tmp_path, golden_a):
+    validated = validate_ir.validate_document(golden_a, phase="full")
+    out = tmp_path / "circuit.tex"
+
+    ir2tikz.serialize_validated(validated, out)
+
+    assert "\\begin{circuitikz}" in out.read_text(encoding="utf-8")
+    assert out.with_name("circuit.debug.tex").exists()
 
 def test_golden_a_structure(tmp_path, golden_a):
     rc, _o, text = run_ir2tikz(tmp_path, golden_a)
@@ -60,6 +70,7 @@ def test_explicit_node_reference_serializes_to_coordinate(tmp_path, golden_b):
     assert "(N_STUB) -- (1,4);" in text
 
 
+@pytest.mark.tex
 def test_golden_a_compiles(tmp_path, golden_a):
     rc, o, _text = run_ir2tikz(tmp_path, golden_a)
     assert rc == 0
@@ -113,6 +124,7 @@ def test_jump_splits_chains(tmp_path, jump_ir):
     assert "(XJ1.north) -- (2,4);" in text
 
 
+@pytest.mark.tex
 def test_jump_compiles(tmp_path, jump_ir):
     rc, o, _text = run_ir2tikz(tmp_path, jump_ir)
     assert rc == 0
@@ -179,6 +191,7 @@ def test_cjk_texts_add_ctex(tmp_path, golden_a):
     assert rc == 0 and "\\usepackage{ctex}" in text
 
 
+@pytest.mark.tex
 def test_cjk_text_compiles_with_lualatex(tmp_path, golden_a):
     golden_a["texts"].append(
         {"content": "输出端口", "at": [5.5, 3.4], "kind": "annotation"})
@@ -298,6 +311,7 @@ def test_arrows_absent_no_section(tmp_path, golden_a):
     assert rc == 0 and "==== arrows ====" not in text
 
 
+@pytest.mark.tex
 def test_arrows_compile(tmp_path, golden_a):
     golden_a["arrows"] = [{"at": [3, 2], "dir": 0, "label": "i_1"}]
     rc, o, _text = run_ir2tikz(tmp_path, golden_a)
@@ -371,6 +385,7 @@ def test_v11_single_label_gap(tmp_path, golden_b):
     assert "\\node[anchor=south] at (5,8.4) {$+12\\mathrm{V}$};" in text
 
 
+@pytest.mark.tex
 def test_v11_combo_compiles(tmp_path, golden_b):
     golden_b["components"][0]["scale"] = 0.75
     golden_b["components"][3]["scale"] = 1.5

@@ -551,6 +551,20 @@ class Serializer(object):
                          ["\\end{document}"]) + "\n"
 
 
+def serialize_validated(validated, output, fragment=False, config=None):
+    if validated.report.has_error() or validated.model is None:
+        raise ValueError("validate 未通过，拒绝序列化（垃圾不进）")
+    config = config if config is not None else irlib.load_config()
+    output = str(output)
+    ser = Serializer(validated.document, validated.model.anchors, config)
+    with open(output, "w", encoding="utf-8") as f:
+        f.write(ser.document(fragment=fragment))
+    dbg = output[:-4] + ".debug.tex" if output.endswith(".tex") else output + ".debug.tex"
+    ser2 = Serializer(validated.document, validated.model.anchors, config)
+    with open(dbg, "w", encoding="utf-8") as f:
+        f.write(ser2.document(debug=True, fragment=fragment))
+
+
 def main(argv=None):
     irlib.ensure_utf8_io()
     ap = argparse.ArgumentParser(description="IR -> circuitikz 序列化")
@@ -569,10 +583,8 @@ def main(argv=None):
         sys.stderr.write("ERROR: 无法读取输入: %s\n" % e)
         return irlib.EXIT_ENV
 
-    report = Report()
-    if validate_ir.check_schema(report, ir, schema):
-        model = IRModel(ir, anchors)
-        validate_ir.run_checks(report, model, ir, "full")
+    validated = validate_ir.validate_document(ir, "full", schema=schema, anchors=anchors)
+    report = validated.report
     if report.has_error():
         sys.stdout.write(report.to_text() + "\n")
         sys.stderr.write("ERROR: validate 未通过，拒绝序列化（垃圾不进）\n")
@@ -580,16 +592,9 @@ def main(argv=None):
     if report.has_warning():
         sys.stderr.write(report.to_text() + "\n")
 
-    ser = Serializer(ir, anchors, config)
     try:
-        with open(args.output, "w", encoding="utf-8") as f:
-            f.write(ser.document(fragment=args.fragment))
-        dbg = args.output
-        dbg = dbg[:-4] + ".debug.tex" if dbg.endswith(".tex") else dbg + ".debug.tex"
-        ser2 = Serializer(ir, anchors, config)  # 重建，避免 coordinate 去重状态串扰
-        with open(dbg, "w", encoding="utf-8") as f:
-            f.write(ser2.document(debug=True, fragment=args.fragment))
-    except OSError as e:
+        serialize_validated(validated, args.output, fragment=args.fragment, config=config)
+    except (OSError, ValueError) as e:
         sys.stderr.write("ERROR: 写输出失败: %s\n" % e)
         return irlib.EXIT_ENV
     sys.stdout.write("OK -> %s\n" % args.output)

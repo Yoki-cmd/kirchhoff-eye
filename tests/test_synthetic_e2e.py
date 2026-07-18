@@ -7,10 +7,14 @@ import sys
 from pathlib import Path
 
 import jsonschema
+import pytest
 from PIL import Image, ImageDraw
 
 from kirchhoff_eye.cli import main
 from generate_synthetic_fixture import apply_variant, image_pixel_sha256
+
+
+pytestmark = pytest.mark.synthetic
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -8,6 +8,7 @@
 压缩 LaTeX log 是本工具的职责，不是模型的。
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import os
 import subprocess
 import sys
@@ -70,30 +71,20 @@ def run_pdftoppm(pdf_path, out_png, dpi, timeout):
     return proc.returncode, base + ".png"
 
 
-def main(argv=None):
-    irlib.ensure_utf8_io()
-    ap = argparse.ArgumentParser(description=".tex -> .png 渲染")
-    ap.add_argument("tex_file")
-    ap.add_argument("-o", "--output", required=True)
-    ap.add_argument("--dpi", type=int, default=300)
-    ap.add_argument("--engine", choices=("auto", "pdflatex", "lualatex"),
-                    default="auto")
-    ap.add_argument("--timeout", type=int, default=120)
-    args = ap.parse_args(argv)
-
+def render_one(tex_file, output, dpi=300, engine_arg="auto", timeout=120):
     try:
-        with open(args.tex_file, "r", encoding="utf-8") as f:
+        with open(tex_file, "r", encoding="utf-8") as f:
             tex_text = f.read()
     except (OSError, UnicodeDecodeError) as e:
         sys.stderr.write("ERROR: 无法读取 tex: %s\n" % e)
         return irlib.EXIT_ENV
 
-    engine = pick_engine(tex_text, args.engine)
-    rc = run_latex(engine, args.tex_file, args.timeout)
+    engine = pick_engine(tex_text, engine_arg)
+    rc = run_latex(engine, tex_file, timeout)
     if rc == irlib.EXIT_ENV:
         return irlib.EXIT_ENV
 
-    stem = os.path.splitext(os.path.abspath(args.tex_file))[0]
+    stem = os.path.splitext(os.path.abspath(tex_file))[0]
     pdf_path, log_path = stem + ".pdf", stem + ".log"
     if rc != 0 or not os.path.exists(pdf_path):
         log_text = ""
@@ -106,23 +97,51 @@ def main(argv=None):
         sys.stdout.write("完整 log: %s\n" % log_path)
         return irlib.EXIT_ERROR
 
-    rc2, png = run_pdftoppm(pdf_path, args.output, args.dpi, args.timeout)
+    rc2, png = run_pdftoppm(pdf_path, output, dpi, timeout)
     if rc2 != 0 or png is None or not os.path.exists(png):
         if rc2 != irlib.EXIT_ENV:
             sys.stderr.write("ERROR: pdftoppm 转换失败 (rc=%s)\n" % rc2)
         return irlib.EXIT_ENV
-    if os.path.abspath(png) != os.path.abspath(args.output):
-        os.replace(png, args.output)
+    if os.path.abspath(png) != os.path.abspath(output):
+        os.replace(png, output)
     sys.stdout.write("OK %s -> %s (engine=%s, dpi=%d)\n"
-                     % (os.path.basename(args.tex_file), args.output, engine, args.dpi))
+                     % (os.path.basename(tex_file), output, engine, dpi))
+    return irlib.EXIT_OK
+
+
+def main(argv=None):
+    irlib.ensure_utf8_io()
+    ap = argparse.ArgumentParser(description=".tex -> .png 渲染")
+    ap.add_argument("tex_file")
+    ap.add_argument("-o", "--output", required=True)
+    ap.add_argument("--dpi", type=int, default=300)
+    ap.add_argument("--engine", choices=("auto", "pdflatex", "lualatex"),
+                    default="auto")
+    ap.add_argument("--timeout", type=int, default=120)
+    args = ap.parse_args(argv)
+
+    jobs = [(args.tex_file, args.output)]
     if not args.tex_file.endswith(".debug.tex"):
         debug_tex = os.path.splitext(args.tex_file)[0] + ".debug.tex"
         if os.path.exists(debug_tex):
             debug_png = os.path.splitext(args.output)[0] + ".debug.png"
-            debug_args = [debug_tex, "-o", debug_png, "--dpi", str(args.dpi),
-                          "--engine", args.engine, "--timeout", str(args.timeout)]
-            if main(debug_args) != irlib.EXIT_OK:
-                return irlib.EXIT_ERROR
+            jobs.append((debug_tex, debug_png))
+
+    if len(jobs) == 1:
+        return render_one(jobs[0][0], jobs[0][1], args.dpi, args.engine, args.timeout)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(
+                render_one, tex_file, output, args.dpi, args.engine, args.timeout
+            )
+            for tex_file, output in jobs
+        ]
+        results = [future.result() for future in futures]
+    if irlib.EXIT_ENV in results:
+        return irlib.EXIT_ENV
+    if any(result != irlib.EXIT_OK for result in results):
+        return irlib.EXIT_ERROR
     return irlib.EXIT_OK
 
 

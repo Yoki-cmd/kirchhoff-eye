@@ -29,17 +29,12 @@ def test_python_workflow_runs_the_public_matrix_and_verification_gate():
     assert 'python-version: ["3.9", "3.11", "3.12"]' in text
     for command in (
         'python -m pip install -e ".[dev]"',
-        "python -m pytest tests -q",
+        'python -m pytest tests -q -m "not tex and not synthetic"',
         "python -m compileall src scripts tests",
         "git diff --check",
     ):
         assert command in text
-    for package in (
-        "texlive-latex-base", "texlive-latex-extra", "texlive-pictures",
-        "texlive-luatex", "texlive-lang-chinese", "texlive-lang-japanese",
-        "poppler-utils",
-    ):
-        assert package in text
+    assert "texlive-latex-base" not in text
     assert "if: matrix.python-version == '3.9'" in text
     assert 'python -m pip install "Pillow==9.0.0"' in text
 
@@ -63,10 +58,12 @@ def test_tex_workflow_exercises_compile_render_label_and_pipeline_paths():
         "tests/test_render_compare_crop.py::test_render_also_renders_matching_debug_tex",
         "tests/test_ir2tikz.py::test_component_label_at_uses_exact_human_selected_coordinate",
         "tests/test_pipeline_cli.py::test_build_valid_ir_without_source_creates_complete_artifacts",
+        "tests/test_review_workflow.py",
         "tests/test_synthetic_e2e.py",
         "tests/test_ir2tikz.py::test_cjk_text_compiles_with_lualatex",
     ):
         assert node_id in text
+    assert "tests/test_synthetic_e2e.py -q -n auto" in text
 
 
 def test_workflows_use_stable_official_actions_and_no_machine_paths():
