@@ -41,6 +41,7 @@ def test_doctor_help_is_available(capsys):
     assert "--json" in output
 
 
+@pytest.mark.tex
 def test_doctor_json_reports_all_required_checks(capsys):
     rc = main(["doctor", "--json"])
     report = json.loads(capsys.readouterr().out)

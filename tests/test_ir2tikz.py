@@ -226,6 +226,7 @@ def test_untrusted_ir_text_rejects_unsafe_tex_commands(tmp_path, golden_a, paylo
     assert rc == 2
 
 
+@pytest.mark.tex
 def test_metadata_comments_cannot_escape_to_tex_body(tmp_path, golden_a):
     golden_a["meta"]["title"] = "safe\n\\typeout{META_INJECTION}"
     golden_a["meta"]["source_image"] = "source^^J\\typeout{SOURCE_INJECTION}"
