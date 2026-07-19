@@ -1,0 +1,167 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kirchhoff-electrical-audit-1.0.schema.json",
+  "title": "kirchhoff-electrical-audit/1.0",
+  "type": "object",
+  "required": [
+    "version",
+    "candidate_ir_sha256",
+    "verdict",
+    "summary",
+    "coverage",
+    "findings",
+    "motifs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": "kirchhoff-electrical-audit/1.0"},
+    "candidate_ir_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "verdict": {"enum": ["pass", "warn", "block"]},
+    "summary": {"$ref": "#/definitions/summary"},
+    "coverage": {"$ref": "#/definitions/coverage"},
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/finding"}
+    },
+    "motifs": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/motif"}
+    }
+  },
+  "definitions": {
+    "summary": {
+      "type": "object",
+      "required": ["blockers", "warnings", "info", "recognized_motifs", "statement"],
+      "additionalProperties": false,
+      "properties": {
+        "blockers": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "integer", "minimum": 0},
+        "info": {"type": "integer", "minimum": 0},
+        "recognized_motifs": {"type": "integer", "minimum": 0},
+        "statement": {"type": "string", "minLength": 1}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "net_graph",
+        "ideal_voltage_constraints",
+        "dc_bias_paths",
+        "nonlinear_operating_point",
+        "frequency_response",
+        "transient",
+        "external_context",
+        "known_numeric_values",
+        "missing_numeric_values",
+        "unparsed_numeric_values",
+        "limitations"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "net_graph": {"enum": ["complete", "limited"]},
+        "ideal_voltage_constraints": {"const": "known-independent-sources-only"},
+        "dc_bias_paths": {"const": "heuristic"},
+        "nonlinear_operating_point": {"const": "not_analyzed"},
+        "frequency_response": {"const": "not_analyzed"},
+        "transient": {"const": "not_analyzed"},
+        "external_context": {"const": "not_inferred"},
+        "known_numeric_values": {"type": "integer", "minimum": 0},
+        "missing_numeric_values": {"type": "integer", "minimum": 0},
+        "unparsed_numeric_values": {"type": "integer", "minimum": 0},
+        "limitations": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "id",
+        "code",
+        "severity",
+        "basis",
+        "message",
+        "ir_paths",
+        "component_ids",
+        "net_names",
+        "assumptions",
+        "confidence",
+        "suggested_checks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^EA[0-9]{3}-[1-9][0-9]*$"},
+        "code": {"type": "string", "pattern": "^EA[0-9]{3}$"},
+        "severity": {"enum": ["blocker", "warning", "info"]},
+        "basis": {
+          "enum": [
+            "power_rail",
+            "ideal_constraint",
+            "device_semantics",
+            "dc_path",
+            "engineering_heuristic",
+            "coverage"
+          ]
+        },
+        "message": {"type": "string", "minLength": 1},
+        "ir_paths": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^/"},
+          "uniqueItems": true
+        },
+        "component_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "net_names": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "suggested_checks": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "motif": {
+      "type": "object",
+      "required": ["id", "code", "kind", "confidence", "component_ids", "net_names", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^M[0-9]{3}-[1-9][0-9]*$"},
+        "code": {"type": "string", "pattern": "^M[0-9]{3}$"},
+        "kind": {
+          "enum": [
+            "voltage_divider",
+            "opamp_voltage_follower",
+            "opamp_negative_feedback",
+            "diode_connected_bjt",
+            "diode_connected_mos"
+          ]
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "component_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "net_names": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

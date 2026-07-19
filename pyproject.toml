@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kirchhoff-eye"
-version = "0.3.0"
+version = "0.5.0"
 description = "IR-driven circuit drawing Agent Skill with deterministic review and circuitikz workflows."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -16,6 +16,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Reserved for future heavier detectors; the current bounded frontend remains
+# Pillow/jsonschema-only and installs no heavy computer-vision or ML stack by default.
+perception = []
 dev = [
   "coverage>=7",
   "pytest>=8",

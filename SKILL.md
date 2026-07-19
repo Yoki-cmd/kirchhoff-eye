@@ -2,7 +2,7 @@
 name: kirchhoff-eye
 description: "Use for IR-driven circuit drawing tasks: redraw a printed/software-exported schematic, draw from a description or netlist, edit/review/repair an IR, or render deterministic circuitikz. Every route converges on canonical JSON IR. Do not claim autonomous arbitrary image/prose/netlist-to-IR recognition."
 metadata:
-  version: 0.3.0
+  version: 0.5.0
 ---
 
 # Kirchhoff-eye：AI 辅助电路图重画 → circuitikz
@@ -22,6 +22,8 @@ metadata:
 - `references/ir-schema.md` — IR 语义正本 + 字段检查清单（§10）
 - `references/circuitikz-style.md` — 序列化规范（工具已实现，人只需懂约定）
 - `references/perception-roadmap.md` — 未来独立图像感知的窄范围、证据架构、模型使用和状态边界
+- `references/perception-evidence-contract.md` — evidence sidecar 的源图/IR 哈希绑定、有限候选、未决门禁与 review queue 合同
+- `references/electrical-plausibility-audit.md` — Source fidelity / Electrical plausibility 双轴审查、规则边界与 assessment 合同
 - `templates/anchors.json` — 多端件引脚偏移实测表
 - `SKILL-ir-fix.md` — **线条布局铁律**（斜线/折返/中点/级联，6 条铁律 + 验证五步法）
 
@@ -35,12 +37,13 @@ python -m pip install -e ".[dev]"
 kirchhoff-eye --help
 ```
 
-v0.3 已提供稳定顶层 CLI、显式审阅状态机和统一任务路由；现有 `scripts/` 命令继续作为
+v0.5 已提供稳定顶层 CLI、显式审阅状态机、统一任务路由和电气合理性 sidecar；现有 `scripts/` 命令继续作为
 向后兼容入口。若当前解释器缺少依赖，应切换虚拟环境，不把个人机器路径写入仓库。
 
 | 命令 | 作用 |
 |---|---|
 | `kirchhoff-eye build ir.json [--source source.png] --out out/job [--dpi 300]` | 生产编排；无 source 得 `valid`，有 source 开启 `needs_review` 第 1 轮 |
+| `kirchhoff-eye audit ir.json --out electrical-audit.json [--json]` | full validate 后构造 net/device graph，输出确定性电气合理性报告；warn/block 仍是成功报告，不是命令失败 |
 | `kirchhoff-eye review out/job round-review.json` | 写入逐区结论和结构化差异；每个 IR region 必须恰有一条结论 |
 | `kirchhoff-eye repair out/job repaired.ir.json --patches patches.json` | 校验 Agent 已修改的 IR，记录本轮 ≤5 个 patch，并开启下一轮 |
 | `kirchhoff-eye approve out/job [--note ...]` | 仅在逐区审读完整且差异为空时显式批准 |
@@ -143,8 +146,15 @@ python scripts/render.py circuit.tex -o circuit.png
 python scripts/compare.py source.png circuit.png -o cmp_round<N>.png
 ```
 
-**审读协议**：打开 cmp_round<N>.png，按 region 逐区对照，每区要么列出差异、要么明确
-写"该区无差异"——不许整图扫一眼了事。可疑处用 crop.py 对两侧同位置取证后再下结论。
+**审读协议（双轴，缺一不可）**：
+1. 打开 cmp_round<N>.png，按 region 逐区对照，每区要么列出差异、要么明确写“该区无差异”。
+2. 再读取 `electrical-audit.json`，从 KCL/KVL、理想电压约束、器件引脚语义、偏置/反馈路径出发填写 `electrical_assessment`。
+3. audit 中每个 warning/blocker 必须恰有一个 claim 引用并 disposition；AI-only claim 必须引用准确 IR path、assumptions、confidence 和 rationale。
+4. “没见过这种电路”不是非法证据；recognized motif 只提供正证据，absence 不得形成 finding。
+5. 若怀疑 perception/重画错误，必须同时创建普通 source difference，并令 claim 使用 `repair_ir + linked_difference_id`，再走 repair。
+6. AI 不得静默修改 canonical IR。确定性 blocker 保持 `needs_human`，不能靠 assessment 绕过。
+
+可疑处用 crop.py 对两侧同位置取证后再下结论。
 
 **编号坐标反馈协议**：同时把 `circuit.debug.png` 交给用户。图中的红色十字是元件内部锚点，
 用于区别锚点坐标和文字外框。用户按网格返回，例如：
@@ -204,8 +214,9 @@ ADD/REMOVE_JUNCTION, ADD_CROSSING, MOVE_TEXT, SET_REGION。
 3. `circuit.debug.png` — 网格+元件 ID 版（用户指着说话用）
 4. `circuit.ir.json` — canonical truth source
 5. `review.json` — 状态、轮次、逐区差异、patch 记录、批准状态
-6. `cmp_round<N>.png` + `rounds/round-<NN>/` — 每轮不可变对比与快照
-7. `DELIVERY.md` + `FEEDBACK.md` — 完整交付报告和反馈话术
+6. `electrical-audit.json` — 当前 IR 的确定性电气审查、限制和 recognized motifs
+7. `cmp_round<N>.png` + `rounds/round-<NN>/` — 每轮不可变对比、audit 与快照
+8. `DELIVERY.md` + `FEEDBACK.md` — 完整交付报告和反馈话术
 
 若用户指出已批准产物存在缺陷，**先冻结证据再修**：把当时的 source、IR、TEX、普通/debug PNG、
 对比图、validation/layout/review/DELIVERY 复制到独立 `evidence/<issue>/`，生成 `SHA256SUMS.txt`

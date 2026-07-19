@@ -1,6 +1,7 @@
 """Deterministic canonical-IR build, review, repair, and approval pipeline."""
 
 import hashlib
+import ctypes
 import json
 import os
 import re
@@ -8,13 +9,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import jsonschema
 
 from .core_loader import load_core_module
+from .electrical.audit import audit_validated
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -50,11 +54,15 @@ EXIT_NEEDS_HUMAN = 1
 EXIT_ERROR = 2
 EXIT_ENV = 3
 REPORT_VERSION = "kirchhoff-review/1.0"
+_THREAD_LOCK_GUARD = threading.Lock()
+_THREAD_LOCKS: Dict[str, threading.RLock] = {}
+_WINDOWS_WAIT_OBJECT_0 = 0
+_WINDOWS_INFINITE = 0xFFFFFFFF
 
 GENERATED_ARTIFACTS = (
     "source.png", "compare.png", "circuit.tex", "circuit.debug.tex",
     "circuit.png", "circuit.debug.png", "validation.json",
-    "layout_report.json", "review.json", "DELIVERY.md", "FEEDBACK.md",
+    "electrical-audit.json", "layout_report.json", "review.json", "DELIVERY.md", "FEEDBACK.md",
     "description.txt", "netlist.txt", "edit-request.txt",
 )
 
@@ -101,6 +109,17 @@ def _validate_ir_in_process(ir: Any) -> Tuple[Any, Dict[str, Any]]:
     return validated, report
 
 
+def audit(ir_file: str) -> Dict[str, Any]:
+    """Validate one canonical IR and return its deterministic electrical audit."""
+    document = _read_json(Path(ir_file).resolve())
+    validated, _validation = _validate_ir_in_process(document)
+    if validated.report.exit_code() == EXIT_ERROR:
+        raise ValueError("canonical IR failed full validation")
+    report = audit_validated(validated)
+    _validate_document(report, "electrical-audit.schema.json")
+    return report
+
+
 def _serialize_in_process(validated: Any, output: Path) -> None:
     core_ir2tikz.serialize_validated(validated, output)
 
@@ -117,12 +136,23 @@ def _compare_in_process(source: Path, rendered: Path, output: Path) -> None:
 
 
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-        encoding="utf-8",
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", prefix=path.name + ".", suffix=".tmp",
+        dir=str(path.parent), delete=False,
     )
-    temp.replace(path)
+    temp = Path(handle.name)
+    try:
+        with handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False, allow_nan=False) + "\n")
+        temp.replace(path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def write_json_atomic(path: Path, data: Dict[str, Any]) -> None:
+    """Publish a JSON document with a unique same-directory temporary file."""
+    _write_json(Path(path), data)
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -329,6 +359,7 @@ def _artifact_paths(out_dir: Path, include_source: bool, round_number: int) -> D
         "circuit_png": "circuit.png",
         "circuit_debug_png": "circuit.debug.png",
         "validation_json": "validation.json",
+        "electrical_audit_json": "electrical-audit.json",
         "layout_report_json": "layout_report.json",
         "review_json": "review.json",
         "delivery_md": "DELIVERY.md",
@@ -366,7 +397,8 @@ def _patch_path_reason(rounds: Sequence[Dict[str, Any]]) -> Optional[str]:
 
 
 def _derive_initial_workflow_state(
-    validation: Dict[str, Any], layout: Dict[str, Any], include_source: bool
+    validation: Dict[str, Any], layout: Dict[str, Any], electrical_audit: Dict[str, Any],
+    include_source: bool,
 ) -> Tuple[str, List[str]]:
     validation_warnings = [
         finding for finding in validation.get("findings", [])
@@ -391,6 +423,8 @@ def _derive_initial_workflow_state(
         reasons.append("blocking_alignment_warning")
     if any(code and code.startswith("BLOCKING_") for code in validation_codes | layout_codes):
         reasons.append("blocking_ambiguity")
+    if electrical_audit.get("verdict") == "block":
+        reasons.append("blocking_electrical_audit")
     if reasons:
         return "needs_human", reasons
     return ("needs_review" if include_source else "valid"), reasons
@@ -414,6 +448,12 @@ def _write_delivery(output: Path, state: Dict[str, Any]) -> None:
     task_kind = state["task"]["kind"]
     latest_round = state["rounds"][-1]
     artifacts = state["artifacts"]
+    staged_audit_path = output / "electrical-audit.json"
+    audit_path = staged_audit_path if staged_audit_path.is_file() else Path(
+        artifacts["electrical_audit_json"]
+    )
+    electrical_audit = _read_json(audit_path)
+    assessment = latest_round.get("electrical_assessment")
     lines = [
         "# Kirchhoff-eye Delivery",
         "",
@@ -429,6 +469,66 @@ def _write_delivery(output: Path, state: Dict[str, Any]) -> None:
         "|---|---|",
     ]
     lines.extend(f"| {name} | `{artifact}` |" for name, artifact in artifacts.items())
+    coverage = electrical_audit["coverage"]
+    lines.extend([
+        "",
+        "## Electrical plausibility",
+        "",
+        f"- Deterministic audit verdict: **{electrical_audit['verdict']}**",
+        f"- Statement: {electrical_audit['summary']['statement']}",
+        f"- Net graph coverage: `{coverage['net_graph']}`",
+        f"- Known/missing/unparsed numeric values: "
+        f"{coverage['known_numeric_values']}/{coverage['missing_numeric_values']}/"
+        f"{coverage['unparsed_numeric_values']}",
+        "- Limitations: " + ("; ".join(coverage["limitations"]) or "None recorded."),
+        "",
+        "### Findings",
+        "",
+        "| ID | Severity | Message | Components | Nets |",
+        "|---|---|---|---|---|",
+    ])
+    if electrical_audit["findings"]:
+        for finding in electrical_audit["findings"]:
+            lines.append(
+                f"| {finding['id']} | {finding['severity']} | {finding['message']} | "
+                f"{', '.join(finding['component_ids']) or '-'} | "
+                f"{', '.join(finding['net_names']) or '-'} |"
+            )
+    else:
+        lines.append("| - | - | No findings. | - | - |")
+    lines.extend([
+        "",
+        "### Recognized motifs",
+        "",
+    ])
+    if electrical_audit["motifs"]:
+        lines.extend(
+            f"- `{motif['id']}` {motif['kind']}: {motif['evidence']}"
+            for motif in electrical_audit["motifs"]
+        )
+    else:
+        lines.append("- None recognized; motif absence is not an error.")
+    lines.extend(["", "### AI electrical assessment", ""])
+    if assessment is None:
+        lines.append("- Pending for this source-backed round." if state.get("electrical_review_required")
+                     else "- Not required for a source-less render.")
+    else:
+        lines.extend([
+            f"- Verdict: **{assessment['verdict']}**",
+            f"- Summary: {assessment['summary']}",
+        ])
+        actionable = [
+            claim for claim in assessment["claims"]
+            if claim["disposition"] in ("reinspect_source", "repair_ir", "needs_context")
+        ]
+        if actionable:
+            lines.append("- Pending actions:")
+            lines.extend(
+                f"  - `{claim['id']}` {claim['disposition']}: {claim['rationale']}"
+                for claim in actionable
+            )
+        else:
+            lines.append("- Pending actions: none.")
     lines.extend(["", "## 逐区核对结论", "", "| 区 | 结论 |", "|---|---|"])
     if not state.get("review_required", False):
         lines.append("| N/A | 不适用：此任务没有 source 对比 |")
@@ -486,7 +586,7 @@ def _snapshot_round(output: Path, round_number: int) -> None:
     snapshot.mkdir(parents=True, exist_ok=True)
     for name in (
         "source.png", "circuit.ir.json", "circuit.tex", "circuit.debug.tex", "circuit.png",
-        "circuit.debug.png", "validation.json", "layout_report.json",
+        "circuit.debug.png", "validation.json", "electrical-audit.json", "layout_report.json",
         f"cmp_round{round_number}.png",
     ):
         source = output / name
@@ -500,6 +600,7 @@ def _round_artifacts(output: Path, round_number: int, include_source: bool) -> D
         "circuit_ir": str((snapshot / "circuit.ir.json").resolve()),
         "circuit_png": str((snapshot / "circuit.png").resolve()),
         "circuit_debug_png": str((snapshot / "circuit.debug.png").resolve()),
+        "electrical_audit_json": str((snapshot / "electrical-audit.json").resolve()),
     }
     if include_source:
         artifacts["compare_png"] = str((snapshot / f"cmp_round{round_number}.png").resolve())
@@ -508,16 +609,96 @@ def _round_artifacts(output: Path, round_number: int, include_source: bool) -> D
 
 def _atomic_copy(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    temp = target.with_name(target.name + ".tmp")
-    shutil.copy2(source, temp)
-    temp.replace(target)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=target.name + ".", suffix=".tmp", dir=str(target.parent)
+    )
+    os.close(fd)
+    temp = Path(temp_name)
+    try:
+        shutil.copy2(source, temp)
+        temp.replace(target)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def _thread_lock(output: Path) -> threading.RLock:
+    key = os.path.normcase(str(output.resolve()))
+    with _THREAD_LOCK_GUARD:
+        lock = _THREAD_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _THREAD_LOCKS[key] = lock
+        return lock
+
+
+def _windows_mutex_name(output: Path) -> str:
+    digest = hashlib.sha256(os.path.normcase(str(output.resolve())).encode("utf-8")).hexdigest()
+    return "Local\\KirchhoffEye-" + digest
+
+
+@contextmanager
+def _windows_job_mutex(output: Path):
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_bool, ctypes.c_wchar_p]
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    kernel32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.WaitForSingleObject.restype = ctypes.c_uint32
+    kernel32.ReleaseMutex.argtypes = [ctypes.c_void_p]
+    kernel32.ReleaseMutex.restype = ctypes.c_bool
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = ctypes.c_bool
+    handle = kernel32.CreateMutexW(None, False, _windows_mutex_name(output))
+    if not handle:
+        raise OSError(ctypes.get_last_error(), "CreateMutexW failed")
+    acquired = False
+    try:
+        result = kernel32.WaitForSingleObject(handle, _WINDOWS_INFINITE)
+        if result != _WINDOWS_WAIT_OBJECT_0:
+            raise OSError(ctypes.get_last_error(), "WaitForSingleObject failed")
+        acquired = True
+        yield
+    finally:
+        if acquired and not kernel32.ReleaseMutex(handle):
+            raise OSError(ctypes.get_last_error(), "ReleaseMutex failed")
+        if not kernel32.CloseHandle(handle):
+            raise OSError(ctypes.get_last_error(), "CloseHandle failed")
+
+
+@contextmanager
+def _job_lock(output: Path):
+    output = output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    lock = _thread_lock(output)
+    with lock:
+        if os.name == "nt":
+            with _windows_job_mutex(output):
+                yield
+            return
+        lock_path = output / ".kirchhoff-eye.lock"
+        lock_path.touch(exist_ok=True)
+        handle = lock_path.open("r+b")
+        acquired = False
+        try:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            acquired = True
+            yield
+        finally:
+            try:
+                if acquired:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            finally:
+                handle.close()
 
 
 def _publish_stage(stage: Path, output: Path, round_number: int) -> None:
     relative_paths = [
         Path(name) for name in (
             "circuit.ir.json", "circuit.tex", "circuit.debug.tex", "circuit.png",
-            "circuit.debug.png", "validation.json", "layout_report.json",
+            "circuit.debug.png", "validation.json", "electrical-audit.json", "layout_report.json",
             f"cmp_round{round_number}.png", "compare.png", "FEEDBACK.md",
             "review.json", "DELIVERY.md",
         )
@@ -556,9 +737,18 @@ def _publish_relative_paths(stage: Path, output: Path, relative_paths: Sequence[
 def _publish_state_and_delivery(output: Path, state: Dict[str, Any]) -> None:
     stage = Path(tempfile.mkdtemp(prefix="kirchhoff-state-", dir=str(output.parent)))
     try:
+        relative_paths = [Path("review.json"), Path("DELIVERY.md")]
+        latest = state["rounds"][-1]
+        assessment = latest.get("electrical_assessment")
+        if assessment is not None:
+            assessment_relative = Path("rounds") / f"round-{state['current_round']:02d}" / \
+                "electrical-assessment.json"
+            (stage / assessment_relative).parent.mkdir(parents=True, exist_ok=True)
+            _write_json(stage / assessment_relative, assessment)
+            relative_paths.append(assessment_relative)
         _write_json(stage / "review.json", state)
         _write_delivery(stage, state)
-        _publish_relative_paths(stage, output, [Path("review.json"), Path("DELIVERY.md")])
+        _publish_relative_paths(stage, output, relative_paths)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
 
@@ -584,17 +774,19 @@ def _load_state(job_dir: str) -> Tuple[Path, Dict[str, Any]]:
     return output, state
 
 
-def _verify_round_evidence(output: Path, state: Dict[str, Any]) -> Tuple[str, str, str]:
+def _verify_round_evidence(output: Path, state: Dict[str, Any]) -> Tuple[str, str, str, str]:
     round_number = state["current_round"]
     latest = state["rounds"][-1]
     snapshot = output / "rounds" / f"round-{round_number:02d}"
     live_ir_hash = _json_file_hash(output / "circuit.ir.json")
     source_hash = _file_hash(output / "source.png")
     comparison_hash = _file_hash(output / f"cmp_round{round_number}.png")
+    electrical_audit_hash = _json_file_hash(output / "electrical-audit.json")
     expected = {
         "ir_sha256": live_ir_hash,
         "source_sha256": source_hash,
         "comparison_sha256": comparison_hash,
+        "electrical_audit_sha256": electrical_audit_hash,
     }
     for key, actual in expected.items():
         if latest.get(key) != actual:
@@ -605,7 +797,79 @@ def _verify_round_evidence(output: Path, state: Dict[str, Any]) -> Tuple[str, st
         raise ValueError("round snapshot source differs from the live source")
     if _file_hash(snapshot / f"cmp_round{round_number}.png") != comparison_hash:
         raise ValueError("round snapshot comparison differs from the live comparison")
-    return live_ir_hash, source_hash, comparison_hash
+    if _json_file_hash(snapshot / "electrical-audit.json") != electrical_audit_hash:
+        raise ValueError("round snapshot electrical audit differs from the live audit")
+    return live_ir_hash, source_hash, comparison_hash, electrical_audit_hash
+
+
+def _live_deterministic_reports(output: Path) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    ir_document = _read_json(output / "circuit.ir.json")
+    validated, validation = _validate_ir_in_process(ir_document)
+    if validated.report.exit_code() == EXIT_ERROR:
+        raise ValueError("live circuit IR no longer passes full validation")
+    layout = _layout_in_process(validated, output / "circuit.ir.json")
+    if layout.get("errors"):
+        raise ValueError("live circuit IR no longer passes layout validation")
+    electrical_audit = audit_validated(validated)
+    _validate_document(electrical_audit, "electrical-audit.schema.json")
+    if _document_hash(electrical_audit) != _json_file_hash(output / "electrical-audit.json"):
+        raise ValueError("live deterministic electrical audit differs from the persisted audit")
+    return validation, layout, electrical_audit
+
+
+def _validate_electrical_assessment(
+    assessment: Dict[str, Any], audit_report: Dict[str, Any], latest: Dict[str, Any],
+    differences: Sequence[Dict[str, Any]],
+) -> Tuple[bool, bool]:
+    _validate_document(assessment, "electrical-assessment.schema.json")
+    if assessment["candidate_ir_sha256"] != latest["ir_sha256"]:
+        raise ValueError("electrical assessment IR hash does not match the current round")
+    if assessment["audit_sha256"] != latest["electrical_audit_sha256"]:
+        raise ValueError("electrical assessment audit hash does not match the current round")
+    all_findings = {
+        finding["id"]: finding for finding in audit_report.get("findings", [])
+    }
+    warning_blockers = {
+        finding["id"]: finding for finding in audit_report.get("findings", [])
+        if finding.get("severity") in ("warning", "blocker")
+    }
+    claims = assessment.get("claims", [])
+    claim_ids = [claim["id"] for claim in claims]
+    if len(claim_ids) != len(set(claim_ids)):
+        raise ValueError("electrical assessment claim IDs must be unique")
+    referenced = [claim.get("audit_finding_id") for claim in claims if claim.get("audit_finding_id")]
+    if any(finding_id not in all_findings for finding_id in referenced):
+        raise ValueError("electrical assessment references an unknown audit finding")
+    required_referenced = [finding_id for finding_id in referenced if finding_id in warning_blockers]
+    if len(required_referenced) != len(set(required_referenced)):
+        raise ValueError("each audit finding may be referenced by exactly one claim")
+    if set(required_referenced) != set(warning_blockers):
+        raise ValueError("each deterministic warning/blocker must have exactly one disposition claim")
+    differences_by_id = {difference["id"]: difference for difference in differences}
+    dispositions = {claim["disposition"] for claim in claims}
+    for claim in claims:
+        if claim["disposition"] == "repair_ir":
+            difference = differences_by_id.get(claim.get("linked_difference_id"))
+            if difference is None:
+                raise ValueError("repair_ir claim must link an existing source-review difference")
+            if difference["ir_path"] not in claim["ir_paths"]:
+                raise ValueError("repair_ir claim and linked difference must share an IR path")
+    verdict = assessment["verdict"]
+    if verdict == "pass" and warning_blockers:
+        raise ValueError("pass assessment cannot contain deterministic warning/blocker findings")
+    if verdict == "pass" and dispositions - {"accept_as_plausible", "confirm_source_intended"}:
+        raise ValueError("pass assessment cannot contain claims that require action")
+    if verdict == "warn" and dispositions - {"accept_as_plausible", "confirm_source_intended"}:
+        raise ValueError("warn assessment cannot hide repair, reinspect, or context actions")
+    if verdict == "requires_repair" and "repair_ir" not in dispositions:
+        raise ValueError("requires_repair assessment needs at least one repair_ir claim")
+    if verdict == "needs_context" and "needs_context" not in dispositions:
+        raise ValueError("needs_context assessment needs at least one needs_context claim")
+    ready = verdict in ("pass", "warn") and not (
+        dispositions & {"repair_ir", "reinspect_source", "needs_context"}
+    )
+    needs_human = verdict == "needs_context" or "reinspect_source" in dispositions
+    return ready, needs_human
 
 
 def _validate_patch_manifest(
@@ -698,17 +962,19 @@ def build(
     preserve_history: bool = False,
     patches_file: Optional[str] = None,
 ) -> int:
+    output = Path(out_dir).resolve()
     try:
-        return _build(
-            ir_file,
-            out_dir,
-            source=source,
-            dpi=dpi,
-            task_kind=task_kind,
-            task_input=task_input,
-            preserve_history=preserve_history,
-            patches_file=patches_file,
-        )
+        with _job_lock(output):
+            return _build(
+                ir_file,
+                str(output),
+                source=source,
+                dpi=dpi,
+                task_kind=task_kind,
+                task_input=task_input,
+                preserve_history=preserve_history,
+                patches_file=patches_file,
+            )
     except (OSError, RuntimeError, json.JSONDecodeError, subprocess.SubprocessError) as exc:
         sys.stderr.write(f"ERROR: build environment failure: {exc}\n")
         return EXIT_ENV
@@ -780,6 +1046,14 @@ def _build(
     if validated.report.exit_code() == EXIT_ERROR:
         return abort(EXIT_ERROR)
 
+    try:
+        with _stage_timer(timings, "electrical_audit"):
+            electrical_audit = audit_validated(validated)
+        _validate_document(electrical_audit, "electrical-audit.schema.json")
+        _write_json(work_output / "electrical-audit.json", electrical_audit)
+    except (OSError, ValueError, jsonschema.ValidationError) as exc:
+        return abort(EXIT_ENV, f"ERROR: electrical audit failed: {exc}\n")
+
     tex = work_output / "circuit.tex"
     try:
         with _stage_timer(timings, "serialization"):
@@ -818,7 +1092,9 @@ def _build(
 
     target_ir = work_ir
     png = work_output / "circuit.png"
-    status, reason_codes = _derive_initial_workflow_state(validation, layout, include_source)
+    status, reason_codes = _derive_initial_workflow_state(
+        validation, layout, electrical_audit, include_source
+    )
     if include_source:
         try:
             region_names = _load_regions(target_ir, require_complete=True)
@@ -847,6 +1123,7 @@ def _build(
         "applied_patches": applied_patches,
         "artifacts": {},
         "ir_sha256": _json_file_hash(target_ir),
+        "electrical_audit_sha256": _json_file_hash(work_output / "electrical-audit.json"),
     }
     if include_source:
         current_round["source_sha256"] = _file_hash(work_output / "source.png")
@@ -872,6 +1149,9 @@ def _build(
         "max_rounds": max_rounds,
         "review_required": include_source,
         "ready_for_approval": False,
+        "electrical_audit_status": electrical_audit["verdict"],
+        "electrical_review_required": include_source,
+        "electrical_ready_for_approval": False,
         "reason_codes": reason_codes,
         "rounds": rounds,
         "artifacts": artifacts,
@@ -898,63 +1178,10 @@ def _build(
 
 
 def review(job_dir: str, review_file: str) -> int:
+    output = Path(job_dir).resolve()
     try:
-        output, state = _load_state(job_dir)
-        try:
-            report = _read_json(Path(review_file).resolve())
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"review JSON is malformed: {exc}") from exc
-        _validate_document(report, "review.schema.json")
-        if not state.get("review_required"):
-            raise ValueError("job has no source comparison and cannot accept a source review")
-        if state["status"] not in ("needs_review", "needs_human"):
-            raise ValueError(f"job status {state['status']} cannot accept a source review")
-        if report["round"] != state["current_round"]:
-            raise ValueError("review round does not match current_round")
-        expected_regions = _load_regions(output / "circuit.ir.json", require_complete=True)
-        actual_regions = [item["name"] for item in report["regions"]]
-        if len(actual_regions) != len(set(actual_regions)):
-            raise ValueError("review region names must be unique")
-        if set(actual_regions) != set(expected_regions):
-            raise ValueError("review must contain exactly one conclusion for every IR region")
-        differences = report["differences"]
-        difference_ids = [item["id"] for item in differences]
-        if len(difference_ids) != len(set(difference_ids)):
-            raise ValueError("review difference IDs must be unique")
-        region_conclusions = {item["name"]: item["conclusion"] for item in report["regions"]}
-        difference_regions = {item["region"] for item in differences}
-        if not difference_regions <= set(expected_regions):
-            raise ValueError("review difference references an unknown region")
-        for region, conclusion in region_conclusions.items():
-            has_differences = region in difference_regions
-            if (conclusion == "differences") != has_differences:
-                raise ValueError("each region conclusion must agree with its bound differences")
-        latest = state["rounds"][-1]
-        if latest.get("reviewed"):
-            raise ValueError("current round is already reviewed and immutable")
-        live_ir_hash, source_hash, comparison_hash = _verify_round_evidence(output, state)
-        latest["reviewed"] = True
-        latest["regions"] = report["regions"]
-        latest["differences"] = differences
-        latest["reviewed_ir_sha256"] = live_ir_hash
-        latest["reviewed_source_sha256"] = source_hash
-        latest["reviewed_comparison_sha256"] = comparison_hash
-        if differences and len(state["rounds"]) >= 2:
-            previous_differences = state["rounds"][-2].get("differences", [])
-            if previous_differences and len(differences) >= len(previous_differences):
-                _append_reason(state, "difference_count_not_decreasing")
-        state["ready_for_approval"] = not differences and not state["reason_codes"]
-        if differences and state["current_round"] >= state["max_rounds"]:
-            state["status"] = "needs_human"
-            _append_reason(state, "max_rounds_reached")
-            state["ready_for_approval"] = False
-        elif state["reason_codes"]:
-            state["status"] = "needs_human"
-        else:
-            state["status"] = "needs_review"
-        _validate_document(state, "review-state.schema.json")
-        _publish_state_and_delivery(output, state)
-        return _status_exit(state["status"])
+        with _job_lock(output):
+            return _review_locked(output, review_file)
     except (OSError, RuntimeError) as exc:
         sys.stderr.write(f"ERROR: review environment failure: {exc}\n")
         return EXIT_ENV
@@ -963,35 +1190,92 @@ def review(job_dir: str, review_file: str) -> int:
         return EXIT_ERROR
 
 
-def approve(job_dir: str, note: str = "") -> int:
+def _review_locked(output: Path, review_file: str) -> int:
+    output, state = _load_state(str(output))
     try:
-        output, state = _load_state(job_dir)
-        latest = state["rounds"][-1]
-        if not state.get("review_required") or not latest.get("reviewed"):
-            raise ValueError("job is not ready for approval; complete a clean region review first")
-        _load_regions(output / "circuit.ir.json", require_complete=True)
-        if latest.get("differences") or state.get("reason_codes"):
-            raise ValueError("job has unresolved differences or blocking reasons")
-        reviewed_regions = latest.get("regions", [])
-        if not reviewed_regions or any(item.get("conclusion") != "no_difference" for item in reviewed_regions):
-            raise ValueError("approval requires a complete zero-difference region review")
-        live_ir_hash, source_hash, comparison_hash = _verify_round_evidence(output, state)
-        if live_ir_hash != latest.get("reviewed_ir_sha256"):
-            raise ValueError("live circuit IR differs from the reviewed IR")
-        if source_hash != latest.get("reviewed_source_sha256"):
-            raise ValueError("source evidence differs from the reviewed source")
-        if comparison_hash != latest.get("reviewed_comparison_sha256"):
-            raise ValueError("comparison evidence differs from the reviewed comparison")
-        if state["status"] == "approved":
-            if state.get("approval", {}).get("ir_sha256") != live_ir_hash:
-                raise ValueError("approved IR hash differs from live circuit IR")
-            return EXIT_OK
-        state["status"] = "approved"
-        state["approval"] = {"note": note, "ir_sha256": live_ir_hash}
+        report = _read_json(Path(review_file).resolve())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"review JSON is malformed: {exc}") from exc
+    _validate_document(report, "review.schema.json")
+    if not state.get("review_required"):
+        raise ValueError("job has no source comparison and cannot accept a source review")
+    if state["status"] not in ("needs_review", "needs_human"):
+        raise ValueError(f"job status {state['status']} cannot accept a source review")
+    if report["round"] != state["current_round"]:
+        raise ValueError("review round does not match current_round")
+    expected_regions = _load_regions(output / "circuit.ir.json", require_complete=True)
+    actual_regions = [item["name"] for item in report["regions"]]
+    if len(actual_regions) != len(set(actual_regions)):
+        raise ValueError("review region names must be unique")
+    if set(actual_regions) != set(expected_regions):
+        raise ValueError("review must contain exactly one conclusion for every IR region")
+    assessment = report.get("electrical_assessment")
+    if assessment is None:
+        raise ValueError("source-backed review requires electrical_assessment")
+    differences = report["differences"]
+    difference_ids = [item["id"] for item in differences]
+    if len(difference_ids) != len(set(difference_ids)):
+        raise ValueError("review difference IDs must be unique")
+    region_conclusions = {item["name"]: item["conclusion"] for item in report["regions"]}
+    difference_regions = {item["region"] for item in differences}
+    if not difference_regions <= set(expected_regions):
+        raise ValueError("review difference references an unknown region")
+    for region, conclusion in region_conclusions.items():
+        has_differences = region in difference_regions
+        if (conclusion == "differences") != has_differences:
+            raise ValueError("each region conclusion must agree with its bound differences")
+    latest = state["rounds"][-1]
+    if latest.get("reviewed"):
+        raise ValueError("current round is already reviewed and immutable")
+    live_ir_hash, source_hash, comparison_hash, electrical_audit_hash = _verify_round_evidence(
+        output, state
+    )
+    audit_report = _read_json(output / "electrical-audit.json")
+    electrical_ready, electrical_needs_human = _validate_electrical_assessment(
+        assessment, audit_report, latest, differences
+    )
+    if audit_report["verdict"] == "block":
+        electrical_ready = False
+    latest["reviewed"] = True
+    latest["regions"] = report["regions"]
+    latest["differences"] = differences
+    latest["reviewed_ir_sha256"] = live_ir_hash
+    latest["reviewed_source_sha256"] = source_hash
+    latest["reviewed_comparison_sha256"] = comparison_hash
+    latest["reviewed_electrical_audit_sha256"] = electrical_audit_hash
+    latest["electrical_assessment"] = assessment
+    latest["electrical_assessment_sha256"] = _document_hash(assessment)
+    latest["artifacts"]["electrical_assessment_json"] = str((
+        output / "rounds" / f"round-{state['current_round']:02d}" /
+        "electrical-assessment.json"
+    ).resolve())
+    if differences and len(state["rounds"]) >= 2:
+        previous_differences = state["rounds"][-2].get("differences", [])
+        if previous_differences and len(differences) >= len(previous_differences):
+            _append_reason(state, "difference_count_not_decreasing")
+    state["electrical_ready_for_approval"] = electrical_ready
+    if electrical_needs_human:
+        _append_reason(state, "electrical_needs_context")
+    state["ready_for_approval"] = (
+        not differences and electrical_ready and not state["reason_codes"]
+    )
+    if differences and state["current_round"] >= state["max_rounds"]:
+        state["status"] = "needs_human"
+        _append_reason(state, "max_rounds_reached")
         state["ready_for_approval"] = False
-        _validate_document(state, "review-state.schema.json")
-        _publish_state_and_delivery(output, state)
-        return EXIT_OK
+    elif state["reason_codes"]:
+        state["status"] = "needs_human"
+    else:
+        state["status"] = "needs_review"
+    _validate_document(state, "review-state.schema.json")
+    _publish_state_and_delivery(output, state)
+    return _status_exit(state["status"])
+
+def approve(job_dir: str, note: str = "") -> int:
+    output = Path(job_dir).resolve()
+    try:
+        with _job_lock(output):
+            return _approve_locked(output, note)
     except (OSError, RuntimeError, json.JSONDecodeError) as exc:
         sys.stderr.write(f"ERROR: approval environment failure: {exc}\n")
         return EXIT_ENV
@@ -1000,54 +1284,137 @@ def approve(job_dir: str, note: str = "") -> int:
         return EXIT_ERROR
 
 
+def _approve_locked(output: Path, note: str) -> int:
+    output, state = _load_state(str(output))
+    latest = state["rounds"][-1]
+    if not state.get("review_required") or not latest.get("reviewed"):
+        raise ValueError("job is not ready for approval; complete a clean region review first")
+    _load_regions(output / "circuit.ir.json", require_complete=True)
+    if latest.get("differences"):
+        raise ValueError("job has unresolved source-review differences")
+    reviewed_regions = latest.get("regions", [])
+    if not reviewed_regions or any(item.get("conclusion") != "no_difference" for item in reviewed_regions):
+        raise ValueError("approval requires a complete zero-difference region review")
+    live_ir_hash, source_hash, comparison_hash, electrical_audit_hash = _verify_round_evidence(
+        output, state
+    )
+    if live_ir_hash != latest.get("reviewed_ir_sha256"):
+        raise ValueError("live circuit IR differs from the reviewed IR")
+    if source_hash != latest.get("reviewed_source_sha256"):
+        raise ValueError("source evidence differs from the reviewed source")
+    if comparison_hash != latest.get("reviewed_comparison_sha256"):
+        raise ValueError("comparison evidence differs from the reviewed comparison")
+    if electrical_audit_hash != latest.get("reviewed_electrical_audit_sha256"):
+        raise ValueError("electrical audit differs from the reviewed audit")
+    assessment = latest.get("electrical_assessment")
+    if assessment is None:
+        raise ValueError("reviewed electrical assessment is missing")
+    electrical_assessment_hash = _document_hash(assessment)
+    if electrical_assessment_hash != latest.get("electrical_assessment_sha256"):
+        raise ValueError("electrical assessment differs from reviewed evidence")
+    assessment_path = latest.get("artifacts", {}).get("electrical_assessment_json")
+    if not assessment_path:
+        raise ValueError("reviewed electrical assessment artifact is missing")
+    persisted_assessment = _read_json(Path(assessment_path))
+    if _document_hash(persisted_assessment) != electrical_assessment_hash:
+        raise ValueError("persisted electrical assessment differs from reviewed evidence")
+    live_validation, live_layout, audit_report = _live_deterministic_reports(output)
+    if audit_report["candidate_ir_sha256"] != live_ir_hash:
+        raise ValueError("electrical audit candidate hash differs from live circuit IR")
+    _live_status, live_reasons = _derive_initial_workflow_state(
+        live_validation, live_layout, audit_report, include_source=True
+    )
+    if live_reasons:
+        raise ValueError("live deterministic evidence has blocking reasons: %s" % ", ".join(live_reasons))
+    electrical_ready, electrical_needs_human = _validate_electrical_assessment(
+        persisted_assessment, audit_report, latest, latest.get("differences", [])
+    )
+    if audit_report["verdict"] == "block" or electrical_needs_human or not electrical_ready:
+        raise ValueError("live electrical evidence is not eligible for approval")
+    convergence_reasons = {
+        code for code in state.get("reason_codes", [])
+        if code in {"difference_count_not_decreasing", "max_rounds_reached"}
+        or code.startswith("patch_path_frozen:")
+    }
+    if convergence_reasons:
+        raise ValueError("job is frozen by a convergence stop rule")
+    state["reason_codes"] = []
+    state["electrical_audit_status"] = audit_report["verdict"]
+    state["electrical_ready_for_approval"] = electrical_ready
+    if state["status"] == "approved":
+        if state.get("approval", {}).get("ir_sha256") != live_ir_hash:
+            raise ValueError("approved IR hash differs from live circuit IR")
+        if state.get("approval", {}).get("electrical_audit_sha256") != electrical_audit_hash:
+            raise ValueError("approved electrical audit hash differs from live audit")
+        if state.get("approval", {}).get("electrical_assessment_sha256") != electrical_assessment_hash:
+            raise ValueError("approved electrical assessment hash differs from live assessment")
+        return EXIT_OK
+    state["status"] = "approved"
+    state["approval"] = {
+        "note": note,
+        "ir_sha256": live_ir_hash,
+        "electrical_audit_sha256": electrical_audit_hash,
+        "electrical_assessment_sha256": electrical_assessment_hash,
+    }
+    state["ready_for_approval"] = False
+    _validate_document(state, "review-state.schema.json")
+    _publish_state_and_delivery(output, state)
+    return EXIT_OK
+
 def repair(
     job_dir: str,
     ir_file: str,
     patches_file: str,
     dpi: int = 300,
 ) -> int:
+    output = Path(job_dir).resolve()
     try:
-        output, state = _load_state(job_dir)
-        stop_reasons = {"difference_count_not_decreasing", "max_rounds_reached"}
-        if stop_reasons.intersection(state.get("reason_codes", [])) or any(
-            code.startswith("patch_path_frozen:") for code in state.get("reason_codes", [])
-        ):
-            raise ValueError("job is frozen by a convergence stop rule")
-        if state["status"] not in ("needs_review", "needs_human"):
-            raise ValueError(f"job status {state['status']} cannot be repaired")
-        if not state["rounds"][-1].get("reviewed"):
-            raise ValueError("current round must be reviewed before repair")
-        if not state["rounds"][-1].get("differences"):
-            raise ValueError("clean review must be approved, not repaired")
-        try:
-            patch_doc = _read_json(Path(patches_file).resolve())
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"patch JSON is malformed: {exc}") from exc
-        _validate_document(patch_doc, "patch-operations.schema.json")
-        previous_ir = _read_json(output / "circuit.ir.json")
-        candidate_ir = _read_json(Path(ir_file).resolve())
-        change_evidence = _validate_patch_manifest(previous_ir, candidate_ir, state, patch_doc)
-        patch_doc["change_evidence"] = change_evidence
-        fd, verified_name = tempfile.mkstemp(
-            prefix=".verified-patches-", suffix=".json", dir=str(output)
-        )
-        os.close(fd)
-        verified_patches = Path(verified_name)
-        _write_json(verified_patches, patch_doc)
-        try:
-            return build(
-                ir_file,
-                str(output),
-                dpi=dpi,
-                task_kind=state["task"]["kind"],
-                preserve_history=True,
-                patches_file=str(verified_patches),
-            )
-        finally:
-            verified_patches.unlink(missing_ok=True)
+        with _job_lock(output):
+            return _repair_locked(output, ir_file, patches_file, dpi)
     except (OSError, RuntimeError) as exc:
         sys.stderr.write(f"ERROR: repair environment failure: {exc}\n")
         return EXIT_ENV
     except ValueError as exc:
         sys.stderr.write(f"ERROR: repair rejected: {exc}\n")
         return EXIT_ERROR
+
+
+def _repair_locked(output: Path, ir_file: str, patches_file: str, dpi: int) -> int:
+    output, state = _load_state(str(output))
+    stop_reasons = {"difference_count_not_decreasing", "max_rounds_reached"}
+    if stop_reasons.intersection(state.get("reason_codes", [])) or any(
+        code.startswith("patch_path_frozen:") for code in state.get("reason_codes", [])
+    ):
+        raise ValueError("job is frozen by a convergence stop rule")
+    if state["status"] not in ("needs_review", "needs_human"):
+        raise ValueError(f"job status {state['status']} cannot be repaired")
+    if not state["rounds"][-1].get("reviewed"):
+        raise ValueError("current round must be reviewed before repair")
+    if not state["rounds"][-1].get("differences"):
+        raise ValueError("clean review must be approved, not repaired")
+    try:
+        patch_doc = _read_json(Path(patches_file).resolve())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"patch JSON is malformed: {exc}") from exc
+    _validate_document(patch_doc, "patch-operations.schema.json")
+    previous_ir = _read_json(output / "circuit.ir.json")
+    candidate_ir = _read_json(Path(ir_file).resolve())
+    change_evidence = _validate_patch_manifest(previous_ir, candidate_ir, state, patch_doc)
+    patch_doc["change_evidence"] = change_evidence
+    fd, verified_name = tempfile.mkstemp(
+        prefix=".verified-patches-", suffix=".json", dir=str(output)
+    )
+    os.close(fd)
+    verified_patches = Path(verified_name)
+    _write_json(verified_patches, patch_doc)
+    try:
+        return _build(
+            ir_file,
+            str(output),
+            dpi=dpi,
+            task_kind=state["task"]["kind"],
+            preserve_history=True,
+            patches_file=str(verified_patches),
+        )
+    finally:
+        verified_patches.unlink(missing_ok=True)

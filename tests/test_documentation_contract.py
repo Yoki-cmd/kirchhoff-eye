@@ -39,6 +39,24 @@ def test_readme_documents_fast_tex_synthetic_and_perf_gates():
     assert "benchmark/perf/benchmark_pipeline.py" in readme
 
 
+def test_public_docs_describe_electrical_audit_and_dual_axis_review():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    howto = (ROOT / "HOWTO.md").read_text(encoding="utf-8")
+    skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "references" / "perception-roadmap.md").read_text(encoding="utf-8")
+    reference = ROOT / "references" / "electrical-plausibility-audit.md"
+
+    assert reference.is_file()
+    for text in (readme, howto, skill):
+        assert "electrical-audit.json" in text
+        assert "electrical_assessment" in text
+    assert "Source fidelity" in readme
+    assert "Electrical plausibility" in readme
+    assert "motif" in skill
+    assert "不得" in skill and "canonical IR" in skill
+    assert "electrical audit" in roadmap.lower()
+
+
 def test_performance_benchmark_uses_pipeline_timings():
     benchmark = ROOT / "benchmark" / "perf" / "benchmark_pipeline.py"
     text = benchmark.read_text(encoding="utf-8")

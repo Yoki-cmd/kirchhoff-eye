@@ -27,6 +27,7 @@ def test_build_valid_ir_without_source_creates_complete_artifacts(tmp_path):
         "circuit.png",
         "circuit.debug.png",
         "validation.json",
+        "electrical-audit.json",
         "layout_report.json",
         "review.json",
         "DELIVERY.md",
@@ -36,22 +37,33 @@ def test_build_valid_ir_without_source_creates_complete_artifacts(tmp_path):
     assert (out / "circuit.debug.png").stat().st_size > 0
 
     validation = json.loads((out / "validation.json").read_text(encoding="utf-8"))
+    electrical = json.loads((out / "electrical-audit.json").read_text(encoding="utf-8"))
     review = json.loads((out / "review.json").read_text(encoding="utf-8"))
     layout = json.loads((out / "layout_report.json").read_text(encoding="utf-8"))
     delivery = (out / "DELIVERY.md").read_text(encoding="utf-8")
 
     assert validation["status"] == "ok"
+    assert electrical["verdict"] == "pass"
     assert layout["status"] == "ok"
     assert review["report_version"] == "kirchhoff-review/1.0"
     assert review["status"] == "valid"
     assert review["task"]["kind"] == "render"
     assert review["current_round"] == 1
     assert review["max_rounds"] == 3
-    assert set(review["timings"]) == {"validation", "serialization", "render", "layout", "total"}
+    assert set(review["timings"]) == {
+        "validation", "electrical_audit", "serialization", "render", "layout", "total"
+    }
     assert review["timings"]["total"] >= review["timings"]["render"]
     assert review["artifacts"]["circuit_png"] == str((out / "circuit.png").resolve())
     assert str((out / "circuit.ir.json").resolve()) in delivery
     assert "compare_png" not in review["artifacts"]
+    assert review["artifacts"]["electrical_audit_json"] == str(
+        (out / "electrical-audit.json").resolve()
+    )
+    assert review["electrical_audit_status"] == "pass"
+    assert review["electrical_review_required"] is False
+    assert review["electrical_ready_for_approval"] is False
+    assert review["rounds"][0]["electrical_audit_sha256"]
     assert "Status: **valid**" in delivery
 
 
@@ -185,6 +197,33 @@ def test_build_unknowns_warning_is_blocking_needs_human(tmp_path):
     assert "blocking_unknown" in state["reason_codes"]
 
 
+def test_build_deterministic_electrical_blocker_needs_human(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    blocked = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
+    blocked["components"].extend([
+        {"id": "VCC1", "type": "vcc", "at": [6, 4],
+         "pins": [{"name": "p", "net": "GND"}]},
+        {"id": "GND2", "type": "ground", "at": [6, -1],
+         "pins": [{"name": "p", "net": "GND"}]},
+    ])
+    blocked["wires"].append({
+        "id": "W4", "points": [{"pin": "VCC1.p"}, {"xy": [6, 0]}, {"pin": "GND2.p"}],
+    })
+    blocked["regions"][2]["component_ids"].extend(["VCC1", "GND2"])
+    ir_path = tmp_path / "blocked.json"
+    ir_path.write_text(json.dumps(blocked), encoding="utf-8")
+    out = tmp_path / "job"
+
+    assert main(["build", str(ir_path), "--out", str(out), "--dpi", "72"]) == 0
+    state = json.loads((out / "review.json").read_text(encoding="utf-8"))
+    audit = json.loads((out / "electrical-audit.json").read_text(encoding="utf-8"))
+    assert audit["verdict"] == "block"
+    assert state["status"] == "needs_human"
+    assert state["electrical_audit_status"] == "block"
+    assert "blocking_electrical_audit" in state["reason_codes"]
+
+
 def test_build_invalid_ir_returns_canonical_error_and_stops(tmp_path):
     from kirchhoff_eye.cli import main
 
@@ -232,7 +271,7 @@ def test_reusing_output_directory_removes_stale_artifacts(tmp_path):
     assert (out / "validation.json").exists()
     for stale in (
         "source.png", "compare.png", "circuit.tex", "circuit.debug.tex",
-        "circuit.png", "circuit.debug.png", "layout_report.json",
+        "circuit.png", "circuit.debug.png", "electrical-audit.json", "layout_report.json",
         "review.json", "DELIVERY.md", "FEEDBACK.md", "cmp_round1.png",
     ):
         assert not (out / stale).exists(), stale
@@ -321,6 +360,25 @@ def test_build_uses_in_process_python_core_stages(tmp_path, monkeypatch):
     assert (out / "validation.json").exists()
     assert (out / "circuit.debug.tex").exists()
     assert (out / "layout_report.json").exists()
+
+
+def test_delivery_prefers_transaction_stage_electrical_audit(tmp_path):
+    import kirchhoff_eye.pipeline as pipeline
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main(["build", str(GOLDEN_A), "--out", str(job), "--dpi", "72"]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    staged_audit = json.loads((job / "electrical-audit.json").read_text(encoding="utf-8"))
+    staged_audit["summary"]["statement"] = "STAGED CURRENT AUDIT"
+    (stage / "electrical-audit.json").write_text(json.dumps(staged_audit), encoding="utf-8")
+
+    pipeline._write_delivery(stage, state)
+
+    delivery = (stage / "DELIVERY.md").read_text(encoding="utf-8")
+    assert "STAGED CURRENT AUDIT" in delivery
 
 
 def test_pipeline_core_imports_ignore_poisoned_top_level_modules():

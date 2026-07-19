@@ -1,0 +1,16 @@
+{
+  "version": "kirchhoff-perception-real-manifest/1.0",
+  "source_policy": "public_or_explicitly_distributable_software_exports_only",
+  "cases": [
+    {"id":"probe01-bipoles-core","image":"../../tests/probes/probe01_bipoles_core.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Software-exported probe; no labelled component/topology truth for accuracy scoring."},
+    {"id":"probe02-bipoles-risky","image":"../../tests/probes/probe02_bipoles_risky.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Short edge is below the supported envelope; expected refusal case."},
+    {"id":"probe03-polarity","image":"../../tests/probes/probe03_polarity.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Software-exported polarity probe; no labelled topology truth."},
+    {"id":"probe03b-battery-jump","image":"../../tests/probes/probe03b_battery_jump.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Software-exported battery/polarity probe; no labelled topology truth."},
+    {"id":"probe03c-battery-measure","image":"../../tests/probes/probe03c_battery1_measure.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Short edge is below the supported envelope; expected refusal case."},
+    {"id":"probe04-labels","image":"../../tests/probes/probe04_labels.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Software-exported label probe; no labelled topology truth."},
+    {"id":"probe05-nodes","image":"../../tests/probes/probe05_nodes.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Software-exported node probe; no labelled topology truth."},
+    {"id":"probe06-misc","image":"../../tests/probes/probe06_misc.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Software-exported miscellaneous-symbol probe; no labelled topology truth."},
+    {"id":"probe07-transform","image":"../../tests/probes/probe07_transform.png","license":"MIT repository fixture","correction_operations":null,"correction_seconds":null,"manual_json_edits":null,"failure_notes":"Short edge is below the supported envelope; expected refusal case."},
+    {"id":"golden-a-export","image":"../../tests/golden/A/golden.png","license":"MIT repository fixture","correction_operations":1,"correction_seconds":3.6262,"manual_json_edits":0,"failure_notes":"Software-exported repair workflow trial; not a real-photo accuracy claim."}
+  ]
+}

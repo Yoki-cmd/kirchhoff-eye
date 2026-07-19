@@ -7,6 +7,7 @@
 1. 一份可直接编译的 circuitikz 代码（`circuit.tex`，布局和原图一致，带分区注释）；
 2. 渲染好的图（`circuit.png`）；
 3. 一张带网格、元件锚点红色十字和元件编号的调试图（`circuit.debug.png`），方便你指着提修改。
+4. 一份 `electrical-audit.json`，区分确定性矛盾、工程 warning、覆盖限制和正向 motif；它不等于“证明电路一定工作”。
 
 ## 怎么用
 
@@ -36,6 +37,12 @@
 ```bash
 kirchhoff-eye review out/job round-review.json
 kirchhoff-eye approve out/job --note "逐区确认通过"
+```
+
+source-backed 的 `round-review.json` 还必须包含 hash 绑定的 `electrical_assessment`。它逐条处置 audit 的 warning/blocker；如果判断是感知/重画错误，必须同时建立普通 difference，再走 repair，不能静默修改 canonical IR。可先独立查看报告：
+
+```bash
+kirchhoff-eye audit circuit.ir.json --out electrical-audit.json --json
 ```
 
 有差异时先让 Agent 修改 IR，再用 `repair` 记录 patch 并开启下一轮：

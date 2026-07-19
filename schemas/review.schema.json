@@ -44,6 +44,9 @@
           "evidence": {"type": "string"}
         }
       }
+    },
+    "electrical_assessment": {
+      "type": "object"
     }
   }
 }

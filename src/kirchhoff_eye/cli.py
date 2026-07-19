@@ -1,12 +1,16 @@
 """Top-level Kirchhoff-eye command line interface."""
 
 import argparse
+import json
+import sys
+from pathlib import Path
 from typing import Optional, Sequence
 
 from . import __version__
 from .doctor import run as run_doctor
 from .label_positions import apply_file
-from .pipeline import approve, build, repair, review
+from .perception.pipeline import perceive
+from .pipeline import approve, audit, build, repair, review, write_json_atomic
 
 
 def _add_build_options(parser: argparse.ArgumentParser, *, source: bool = False) -> None:
@@ -57,6 +61,28 @@ def build_parser() -> argparse.ArgumentParser:
     build_cmd.add_argument("--out", required=True)
     build_cmd.add_argument("--dpi", type=int, default=300)
     build_cmd.set_defaults(handler=_run_build)
+
+    perceive_cmd = commands.add_parser(
+        "perceive",
+        help="run bounded evidence-producing image perception and create an Eye job",
+    )
+    perceive_cmd.add_argument("image", metavar="IMAGE")
+    perceive_cmd.add_argument("--out", required=True)
+    perceive_cmd.add_argument(
+        "--seed-ir",
+        help="optional agent/human-authored canonical IR to bind, validate, render, and review",
+    )
+    perceive_cmd.add_argument("--dpi", type=int, default=300)
+    perceive_cmd.set_defaults(handler=_run_perceive)
+
+    audit_cmd = commands.add_parser(
+        "audit",
+        help="validate a canonical IR and produce a deterministic electrical plausibility report",
+    )
+    audit_cmd.add_argument("ir_file", metavar="IR_FILE")
+    audit_cmd.add_argument("--out")
+    audit_cmd.add_argument("--json", action="store_true", help="print the report to stdout")
+    audit_cmd.set_defaults(handler=_run_audit)
 
     review_cmd = commands.add_parser(
         "review",
@@ -171,6 +197,43 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _run_build(args: argparse.Namespace) -> int:
     return build(args.ir_file, args.out, source=args.source, dpi=args.dpi)
+
+
+def _run_perceive(args: argparse.Namespace) -> int:
+    try:
+        result = perceive(args.image, args.out, seed_ir=args.seed_ir, dpi=args.dpi)
+    except (OSError, RuntimeError, json.JSONDecodeError) as exc:
+        import sys
+        sys.stderr.write(f"ERROR: perception environment failure: {exc}\n")
+        return 3
+    except ValueError as exc:
+        import sys
+        sys.stderr.write(f"ERROR: perception input: {exc}\n")
+        return 2
+    # A produced needs_human job is successful command execution; workflow state lives
+    # in review.json, matching the existing build/review status contract.
+    return 0
+
+
+def _run_audit(args: argparse.Namespace) -> int:
+    if args.out is None and not args.json:
+        sys.stderr.write("ERROR: audit requires --out and/or --json\n")
+        return 2
+    try:
+        report = audit(args.ir_file)
+        text = json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+        if args.out is not None:
+            target = Path(args.out).resolve()
+            write_json_atomic(target, report)
+        if args.json:
+            sys.stdout.write(text)
+        return 0
+    except (ValueError, json.JSONDecodeError) as exc:
+        sys.stderr.write(f"ERROR: invalid audit input: {exc}\n")
+        return 2
+    except (OSError, RuntimeError) as exc:
+        sys.stderr.write(f"ERROR: audit environment failure: {exc}\n")
+        return 3
 
 
 def _run_review(args: argparse.Namespace) -> int:

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Human/Agent review and approval are explicit production states."""
+import hashlib
 import json
 from pathlib import Path
 
@@ -14,7 +15,7 @@ SOURCE_A = ROOT / "tests" / "golden" / "A" / "golden.png"
 pytestmark = pytest.mark.tex
 
 
-def _write_clean_review(path, round_number=1):
+def _write_clean_review(path, round_number=1, job=None):
     ir = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
     report = {
         "round": round_number,
@@ -24,10 +25,23 @@ def _write_clean_review(path, round_number=1):
         ],
         "differences": [],
     }
+    if job is not None:
+        state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+        latest = state["rounds"][-1]
+        audit = json.loads((job / "electrical-audit.json").read_text(encoding="utf-8"))
+        assert audit["verdict"] == "pass"
+        report["electrical_assessment"] = {
+            "version": "kirchhoff-electrical-assessment/1.0",
+            "candidate_ir_sha256": latest["ir_sha256"],
+            "audit_sha256": latest["electrical_audit_sha256"],
+            "verdict": "pass",
+            "summary": "分析范围内未发现需要处置的电气问题。",
+            "claims": [],
+        }
     path.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
 
 
-def _write_difference_review(path, round_number=1, count=1):
+def _write_difference_review(path, round_number=1, count=1, job=None):
     ir = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
     report = {
         "round": round_number,
@@ -52,6 +66,28 @@ def _write_difference_review(path, round_number=1, count=1):
             for index in range(count)
         ],
     }
+    if job is not None:
+        state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+        latest = state["rounds"][-1]
+        report["electrical_assessment"] = {
+            "version": "kirchhoff-electrical-assessment/1.0",
+            "candidate_ir_sha256": latest["ir_sha256"],
+            "audit_sha256": latest["electrical_audit_sha256"],
+            "verdict": "requires_repair",
+            "summary": "source fidelity differences require repair through the existing state machine.",
+            "claims": [{
+                "id": "AIC1",
+                "severity": "warning",
+                "basis": "source_evidence",
+                "ir_paths": [report["differences"][0]["ir_path"]],
+                "description": "The reviewed source difference requires a canonical IR repair.",
+                "assumptions": ["The source-region comparison is reliable."],
+                "confidence": 0.95,
+                "disposition": "repair_ir",
+                "linked_difference_id": report["differences"][0]["id"],
+                "rationale": "The difference must be repaired through canonical IR, never by silent rewiring.",
+            }],
+        }
     path.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
 
 
@@ -85,7 +121,7 @@ def test_clean_review_requires_explicit_approval(tmp_path):
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     round_review = tmp_path / "round-review.json"
-    _write_clean_review(round_review)
+    _write_clean_review(round_review, job=job)
 
     assert main(["review", str(job), str(round_review)]) == 0
     state = json.loads((job / "review.json").read_text(encoding="utf-8"))
@@ -99,8 +135,272 @@ def test_clean_review_requires_explicit_approval(tmp_path):
     delivery = (job / "DELIVERY.md").read_text(encoding="utf-8")
     assert approved["status"] == "approved"
     assert approved["approval"]["note"] == "逐区确认通过"
+    assert approved["approval"]["electrical_audit_sha256"]
+    assert approved["approval"]["electrical_assessment_sha256"]
     assert "Status: **approved**" in delivery
     assert "source | 无差异" in delivery
+
+
+def test_source_review_requires_hash_bound_electrical_assessment(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    missing = tmp_path / "missing.json"
+    _write_clean_review(missing)
+    before = _job_bytes(job)
+    assert main(["review", str(job), str(missing)]) == 2
+    assert _job_bytes(job) == before
+
+    mismatched = tmp_path / "mismatched.json"
+    _write_clean_review(mismatched, job=job)
+    report = json.loads(mismatched.read_text(encoding="utf-8"))
+    report["electrical_assessment"]["audit_sha256"] = "f" * 64
+    mismatched.write_text(json.dumps(report), encoding="utf-8")
+    assert main(["review", str(job), str(mismatched)]) == 2
+    assert _job_bytes(job) == before
+
+
+def test_pass_assessment_may_preserve_non_actionable_info_claim(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    review_path = tmp_path / "review.json"
+    _write_clean_review(review_path, job=job)
+    report = json.loads(review_path.read_text(encoding="utf-8"))
+    report["electrical_assessment"]["claims"] = [{
+        "id": "AIC1", "severity": "info", "basis": "recognized_motif",
+        "ir_paths": ["/components/1"],
+        "description": "The divider motif provides positive plausibility evidence.",
+        "assumptions": ["R1 and R2 retain their reviewed net assignments."],
+        "confidence": 1.0, "disposition": "accept_as_plausible",
+        "rationale": "This is informational and requires no action.",
+    }]
+    review_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert main(["review", str(job), str(review_path)]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    assert state["ready_for_approval"] is True
+
+
+def test_audit_warning_requires_one_disposition_claim_per_finding(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    warned = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
+    warned["components"].append({
+        "id": "V2", "type": "vsource", "from": [6, 0], "to": [6, 4],
+        "pins": [{"name": "1", "net": "N_V2_NEG"}, {"name": "2", "net": "N_V2_POS"}],
+        "value": "6\\mathrm{V}",
+    })
+    warned["components"].append({
+        "id": "V3", "type": "vsource", "from": [8, 0], "to": [8, 4],
+        "pins": [{"name": "1", "net": "N_V2_NEG"}, {"name": "2", "net": "N_V2_POS"}],
+        "value": "6\\mathrm{V}",
+    })
+    warned["wires"].extend([
+        {"id": "W4", "points": [{"pin": "V2.1"}, {"pin": "V3.1"}]},
+        {"id": "W5", "points": [{"pin": "V2.2"}, {"pin": "V3.2"}]},
+    ])
+    warned["nets"].extend([{"name": "N_V2_NEG"}, {"name": "N_V2_POS"}])
+    warned["regions"][0]["component_ids"].extend(["V2", "V3"])
+    ir_path = tmp_path / "warned.json"
+    ir_path.write_text(json.dumps(warned), encoding="utf-8")
+    job = tmp_path / "job"
+    assert main([
+        "build", str(ir_path), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    audit = json.loads((job / "electrical-audit.json").read_text(encoding="utf-8"))
+    assert audit["verdict"] == "warn"
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    report = {
+        "round": 1,
+        "regions": [
+            {"name": region["name"], "conclusion": "no_difference", "summary": "无差异"}
+            for region in warned["regions"]
+        ],
+        "differences": [],
+        "electrical_assessment": {
+            "version": "kirchhoff-electrical-assessment/1.0",
+            "candidate_ir_sha256": state["rounds"][0]["ir_sha256"],
+            "audit_sha256": state["rounds"][0]["electrical_audit_sha256"],
+            "verdict": "warn",
+            "summary": "确认原图有意旁路该电阻。",
+            "claims": [],
+        },
+    }
+    review_path = tmp_path / "review.json"
+    review_path.write_text(json.dumps(report), encoding="utf-8")
+    assert main(["review", str(job), str(review_path)]) == 2
+
+    report["electrical_assessment"]["claims"] = [
+        {
+            "id": "AIC%d" % (index + 1),
+            "severity": finding["severity"],
+            "basis": "audit_finding",
+            "audit_finding_id": finding["id"],
+            "ir_paths": finding["ir_paths"] or ["/components/0"],
+            "description": finding["message"],
+            "assumptions": finding["assumptions"] or ["Source connectivity is intentional."],
+            "confidence": 0.95,
+            "disposition": "confirm_source_intended",
+            "rationale": "原图连接证据清晰，保留为 source-faithful。",
+        }
+        for index, finding in enumerate(audit["findings"])
+        if finding["severity"] in ("warning", "blocker")
+    ]
+    review_path.write_text(json.dumps(report), encoding="utf-8")
+    assert main(["review", str(job), str(review_path)]) == 0
+    reviewed = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    assert reviewed["electrical_ready_for_approval"] is True
+    assert reviewed["ready_for_approval"] is True
+
+
+def test_requires_repair_claim_must_link_matching_source_difference(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    review_path = tmp_path / "review.json"
+    _write_difference_review(review_path)
+    report = json.loads(review_path.read_text(encoding="utf-8"))
+    report["electrical_assessment"] = {
+        "version": "kirchhoff-electrical-assessment/1.0",
+        "candidate_ir_sha256": state["rounds"][0]["ir_sha256"],
+        "audit_sha256": state["rounds"][0]["electrical_audit_sha256"],
+        "verdict": "requires_repair",
+        "summary": "疑似 source fidelity 错误，需通过普通 difference 修复。",
+        "claims": [{
+            "id": "AIC1", "severity": "warning", "basis": "source_evidence",
+            "ir_paths": ["/components/1/label_at"],
+            "description": "R1 location likely differs from source.",
+            "assumptions": ["The source comparison is reliable."], "confidence": 0.9,
+            "disposition": "repair_ir", "rationale": "逐区对比发现偏移。",
+        }],
+    }
+    review_path.write_text(json.dumps(report), encoding="utf-8")
+    assert main(["review", str(job), str(review_path)]) == 2
+
+    report["electrical_assessment"]["claims"][0]["linked_difference_id"] = "D1"
+    review_path.write_text(json.dumps(report), encoding="utf-8")
+    assert main(["review", str(job), str(review_path)]) == 0
+
+
+def test_needs_context_transitions_to_needs_human(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    report_path = tmp_path / "review.json"
+    _write_clean_review(report_path, job=job)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["electrical_assessment"] = {
+        "version": "kirchhoff-electrical-assessment/1.0",
+        "candidate_ir_sha256": state["rounds"][0]["ir_sha256"],
+        "audit_sha256": state["rounds"][0]["electrical_audit_sha256"],
+        "verdict": "needs_context",
+        "summary": "需要外部端口工作条件。",
+        "claims": [{
+            "id": "AIC1", "severity": "info", "basis": "engineering_heuristic",
+            "ir_paths": ["/terminals/0"], "description": "External load is unknown.",
+            "assumptions": ["The load changes operating behavior."], "confidence": 0.8,
+            "disposition": "needs_context", "rationale": "IR 不表达外部负载。",
+        }],
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    assert main(["review", str(job), str(report_path)]) == 0
+    reviewed = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    assert reviewed["status"] == "needs_human"
+    assert "electrical_needs_context" in reviewed["reason_codes"]
+
+
+def test_deterministic_blocker_cannot_be_cleared_by_ai_confirmation(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    blocked = json.loads(GOLDEN_A.read_text(encoding="utf-8"))
+    blocked["components"].extend([
+        {"id": "VCC1", "type": "vcc", "at": [6, 4],
+         "pins": [{"name": "p", "net": "GND"}]},
+        {"id": "GND2", "type": "ground", "at": [6, -1],
+         "pins": [{"name": "p", "net": "GND"}]},
+    ])
+    blocked["wires"].append({
+        "id": "W4", "points": [{"pin": "VCC1.p"}, {"xy": [6, 0]}, {"pin": "GND2.p"}],
+    })
+    blocked["regions"][2]["component_ids"].extend(["VCC1", "GND2"])
+    ir_path = tmp_path / "blocked.json"
+    ir_path.write_text(json.dumps(blocked), encoding="utf-8")
+    job = tmp_path / "job"
+    assert main([
+        "build", str(ir_path), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    audit = json.loads((job / "electrical-audit.json").read_text(encoding="utf-8"))
+    report = {
+        "round": 1,
+        "regions": [
+            {"name": region["name"], "conclusion": "no_difference", "summary": "无差异"}
+            for region in blocked["regions"]
+        ],
+        "differences": [],
+        "electrical_assessment": {
+            "version": "kirchhoff-electrical-assessment/1.0",
+            "candidate_ir_sha256": state["rounds"][0]["ir_sha256"],
+            "audit_sha256": state["rounds"][0]["electrical_audit_sha256"],
+            "verdict": "warn",
+            "summary": "确认原图有意连接这些电源轨，但确定性 blocker 仍须人工处理。",
+            "claims": [
+                {
+                    "id": "AIC%d" % (index + 1),
+                    "severity": finding["severity"],
+                    "basis": "audit_finding",
+                    "audit_finding_id": finding["id"],
+                    "ir_paths": finding["ir_paths"] or ["/components/0"],
+                    "description": finding["message"],
+                    "assumptions": finding["assumptions"] or ["Source is intentional."],
+                    "confidence": 0.99,
+                    "disposition": "confirm_source_intended",
+                    "rationale": "原图连线清晰。",
+                }
+                for index, finding in enumerate(audit["findings"])
+                if finding["severity"] in ("warning", "blocker")
+            ],
+        },
+    }
+    review_path = tmp_path / "review.json"
+    review_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert main(["review", str(job), str(review_path)]) == 0
+    reviewed = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    assert reviewed["status"] == "needs_human"
+    assert reviewed["electrical_ready_for_approval"] is False
+    assert "blocking_electrical_audit" in reviewed["reason_codes"]
+    assert main(["approve", str(job)]) == 2
+
+    forged = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    forged["reason_codes"] = []
+    forged["electrical_ready_for_approval"] = True
+    forged["ready_for_approval"] = True
+    forged["status"] = "needs_review"
+    (job / "review.json").write_text(json.dumps(forged), encoding="utf-8")
+
+    assert main(["approve", str(job)]) == 2
 
 
 def test_approve_rederives_invariants_and_binds_review_to_live_ir(tmp_path):
@@ -122,7 +422,7 @@ def test_approve_rederives_invariants_and_binds_review_to_live_ir(tmp_path):
         "--out", str(changed_job), "--dpi", "72",
     ]) == 0
     clean = tmp_path / "clean-review.json"
-    _write_clean_review(clean)
+    _write_clean_review(clean, job=changed_job)
     assert main(["review", str(changed_job), str(clean)]) == 0
     altered = json.loads((changed_job / "circuit.ir.json").read_text(encoding="utf-8"))
     altered["components"][1]["label_at"] = [9, 9]
@@ -134,10 +434,35 @@ def test_approve_rederives_invariants_and_binds_review_to_live_ir(tmp_path):
         "build", str(GOLDEN_A), "--source", str(SOURCE_A),
         "--out", str(evidence_job), "--dpi", "72",
     ]) == 0
+    _write_clean_review(clean, job=evidence_job)
     assert main(["review", str(evidence_job), str(clean)]) == 0
     comparison = evidence_job / "cmp_round1.png"
     comparison.write_bytes(comparison.read_bytes() + b"tampered")
     assert main(["approve", str(evidence_job)]) == 2
+
+
+def test_approve_uses_live_evidence_instead_of_stale_cached_denials(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    clean = tmp_path / "clean.json"
+    _write_clean_review(clean, job=job)
+    assert main(["review", str(job), str(clean)]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    state["status"] = "needs_human"
+    state["reason_codes"] = ["blocking_pose_warning"]
+    state["ready_for_approval"] = False
+    state["electrical_ready_for_approval"] = False
+    (job / "review.json").write_text(json.dumps(state), encoding="utf-8")
+
+    assert main(["approve", str(job)]) == 0
+    approved = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    assert approved["status"] == "approved"
+    assert approved["reason_codes"] == []
 
 
 @pytest.mark.parametrize("command", ["review", "approve"])
@@ -152,7 +477,7 @@ def test_review_and_approve_delivery_failure_rolls_back_every_job_file(
         "--out", str(job), "--dpi", "72",
     ]) == 0
     clean = tmp_path / "clean-review.json"
-    _write_clean_review(clean)
+    _write_clean_review(clean, job=job)
     if command == "approve":
         assert main(["review", str(job), str(clean)]) == 0
     before = _job_bytes(job)
@@ -171,16 +496,71 @@ def test_repeated_approve_rechecks_live_evidence(tmp_path):
 
     job = tmp_path / "job"
     clean = tmp_path / "clean-review.json"
-    _write_clean_review(clean)
     assert main([
         "build", str(GOLDEN_A), "--source", str(SOURCE_A),
         "--out", str(job), "--dpi", "72",
     ]) == 0
+    _write_clean_review(clean, job=job)
     assert main(["review", str(job), str(clean)]) == 0
     assert main(["approve", str(job)]) == 0
     altered = json.loads((job / "circuit.ir.json").read_text(encoding="utf-8"))
     altered["meta"]["title"] = "tampered after approval"
     (job / "circuit.ir.json").write_text(json.dumps(altered), encoding="utf-8")
+
+    assert main(["approve", str(job)]) == 2
+
+
+def test_approve_rejects_tampered_audit_or_assessment(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    audit_job = tmp_path / "audit-job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(audit_job), "--dpi", "72",
+    ]) == 0
+    clean = tmp_path / "clean.json"
+    _write_clean_review(clean, job=audit_job)
+    assert main(["review", str(audit_job), str(clean)]) == 0
+    audit = json.loads((audit_job / "electrical-audit.json").read_text(encoding="utf-8"))
+    audit["summary"]["statement"] = "tampered"
+    (audit_job / "electrical-audit.json").write_text(json.dumps(audit), encoding="utf-8")
+    assert main(["approve", str(audit_job)]) == 2
+
+    assessment_job = tmp_path / "assessment-job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(assessment_job), "--dpi", "72",
+    ]) == 0
+    _write_clean_review(clean, job=assessment_job)
+    assert main(["review", str(assessment_job), str(clean)]) == 0
+    state = json.loads((assessment_job / "review.json").read_text(encoding="utf-8"))
+    state["rounds"][0]["electrical_assessment"]["summary"] = "tampered"
+    state["rounds"][0]["electrical_assessment_sha256"] = hashlib.sha256(
+        json.dumps(
+            state["rounds"][0]["electrical_assessment"],
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    (assessment_job / "review.json").write_text(json.dumps(state), encoding="utf-8")
+    assert main(["approve", str(assessment_job)]) == 2
+
+
+def test_approve_rejects_tampered_persisted_assessment_artifact(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    job = tmp_path / "job"
+    assert main([
+        "build", str(GOLDEN_A), "--source", str(SOURCE_A),
+        "--out", str(job), "--dpi", "72",
+    ]) == 0
+    clean = tmp_path / "clean.json"
+    _write_clean_review(clean, job=job)
+    assert main(["review", str(job), str(clean)]) == 0
+    state = json.loads((job / "review.json").read_text(encoding="utf-8"))
+    persisted = Path(state["rounds"][0]["artifacts"]["electrical_assessment_json"])
+    assessment = json.loads(persisted.read_text(encoding="utf-8"))
+    assessment["summary"] = "tampered persisted assessment"
+    persisted.write_text(json.dumps(assessment), encoding="utf-8")
 
     assert main(["approve", str(job)]) == 2
 
@@ -199,18 +579,29 @@ def test_w103_blocks_approval_without_warning_disposition(tmp_path):
         "--out", str(job), "--dpi", "72",
     ]) == 0
     review_file = tmp_path / "review.json"
-    review_file.write_text(json.dumps({
+    _write_clean_review(review_file, job=job)
+    report = json.loads(review_file.read_text(encoding="utf-8"))
+    report.update({
         "round": 1,
         "regions": [
             {"name": region["name"], "conclusion": "no_difference", "summary": "verified"}
             for region in ir["regions"]
         ],
         "differences": [],
-    }), encoding="utf-8")
+    })
+    review_file.write_text(json.dumps(report), encoding="utf-8")
 
     assert main(["review", str(job), str(review_file)]) == 0
     state = json.loads((job / "review.json").read_text(encoding="utf-8"))
     assert "blocking_pose_warning" in state["reason_codes"]
+    assert main(["approve", str(job)]) == 2
+
+    state["reason_codes"] = []
+    state["status"] = "needs_review"
+    state["ready_for_approval"] = True
+    state["electrical_ready_for_approval"] = True
+    (job / "review.json").write_text(json.dumps(state), encoding="utf-8")
+
     assert main(["approve", str(job)]) == 2
 
 
@@ -299,7 +690,7 @@ def test_reviewed_round_is_immutable_and_cannot_erase_recorded_differences(tmp_p
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     difference_review = tmp_path / "difference-review.json"
-    _write_difference_review(difference_review)
+    _write_difference_review(difference_review, job=job)
     assert main(["review", str(job), str(difference_review)]) == 0
     before = (job / "review.json").read_bytes()
     clean_review = tmp_path / "clean-review.json"
@@ -316,7 +707,7 @@ def test_difference_review_and_repair_preserve_round_history_and_patch_log(tmp_p
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     round_review = tmp_path / "round-review.json"
-    _write_difference_review(round_review)
+    _write_difference_review(round_review, job=job)
     assert main(["review", str(job), str(round_review)]) == 0
 
     patches = tmp_path / "patches.json"
@@ -358,7 +749,7 @@ def test_max_rounds_transitions_unresolved_review_to_needs_human(tmp_path, monke
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     first_review = tmp_path / "review-1.json"
-    _write_difference_review(first_review, round_number=1, count=2)
+    _write_difference_review(first_review, round_number=1, count=2, job=job)
     assert main(["review", str(job), str(first_review)]) == 0
     patches = tmp_path / "patches.json"
     patches.write_text(json.dumps({
@@ -366,7 +757,7 @@ def test_max_rounds_transitions_unresolved_review_to_needs_human(tmp_path, monke
     }), encoding="utf-8")
     assert main(["repair", str(job), str(_moved_r1_ir(tmp_path / "repaired.json")), "--patches", str(patches), "--dpi", "72"]) == 0
     second_review = tmp_path / "review-2.json"
-    _write_difference_review(second_review, round_number=2, count=1)
+    _write_difference_review(second_review, round_number=2, count=1, job=job)
 
     assert main(["review", str(job), str(second_review)]) == 0
     state = json.loads((job / "review.json").read_text(encoding="utf-8"))
@@ -412,7 +803,7 @@ def test_review_rejects_duplicate_difference_ids_without_mutating_state(tmp_path
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     before = (job / "review.json").read_bytes()
     duplicate = tmp_path / "duplicate-differences.json"
-    _write_difference_review(duplicate, count=2)
+    _write_difference_review(duplicate, count=2, job=job)
     report = json.loads(duplicate.read_text(encoding="utf-8"))
     report["differences"][1]["id"] = "D1"
     duplicate.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
@@ -430,7 +821,7 @@ def test_review_differences_are_bound_to_regions(tmp_path):
         "--out", str(job), "--dpi", "72",
     ]) == 0
     review_file = tmp_path / "review.json"
-    _write_difference_review(review_file)
+    _write_difference_review(review_file, job=job)
     report = json.loads(review_file.read_text(encoding="utf-8"))
     report["regions"][1]["conclusion"] = "differences"
     report["regions"][1]["summary"] = "也有差异"
@@ -438,7 +829,7 @@ def test_review_differences_are_bound_to_regions(tmp_path):
     review_file.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
     assert main(["review", str(job), str(review_file)]) == 2
 
-    _write_difference_review(review_file)
+    _write_difference_review(review_file, job=job)
     report = json.loads(review_file.read_text(encoding="utf-8"))
     report["differences"][0]["region"] = report["regions"][1]["name"]
     review_file.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
@@ -451,7 +842,7 @@ def test_repair_rejects_more_than_five_patch_operations_without_mutating_job(tmp
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     round_review = tmp_path / "round-review.json"
-    _write_difference_review(round_review)
+    _write_difference_review(round_review, job=job)
     assert main(["review", str(job), str(round_review)]) == 0
     before = (job / "review.json").read_bytes()
     patches = tmp_path / "too-many-patches.json"
@@ -475,7 +866,7 @@ def test_repair_invalid_ir_is_transactional_and_preserves_current_job(tmp_path):
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     round_review = tmp_path / "round-review.json"
-    _write_difference_review(round_review)
+    _write_difference_review(round_review, job=job)
     assert main(["review", str(job), str(round_review)]) == 0
     patches = tmp_path / "patches.json"
     patches.write_text(json.dumps({
@@ -503,7 +894,7 @@ def test_repair_publish_failure_rolls_back_every_live_artifact(tmp_path, monkeyp
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     round_review = tmp_path / "round-review.json"
-    _write_difference_review(round_review)
+    _write_difference_review(round_review, job=job)
     assert main(["review", str(job), str(round_review)]) == 0
     patches = tmp_path / "patches.json"
     _write_patches(patches, [{
@@ -549,7 +940,7 @@ def test_repair_uses_unique_transaction_staging_directory(tmp_path, monkeypatch)
         "--out", str(job), "--dpi", "72",
     ]) == 0
     review_file = tmp_path / "review.json"
-    _write_difference_review(review_file)
+    _write_difference_review(review_file, job=job)
     assert main(["review", str(job), str(review_file)]) == 0
     patches = tmp_path / "patches.json"
     _write_patches(patches, [{
@@ -584,7 +975,7 @@ def test_repair_uses_unique_verified_patch_file(tmp_path, monkeypatch):
         "--out", str(job), "--dpi", "72",
     ]) == 0
     review_file = tmp_path / "review.json"
-    _write_difference_review(review_file)
+    _write_difference_review(review_file, job=job)
     assert main(["review", str(job), str(review_file)]) == 0
     patches = tmp_path / "patches.json"
     _write_patches(patches, [{
@@ -614,7 +1005,7 @@ def test_repair_rejects_unchanged_ir_and_unverifiable_patch_log(tmp_path):
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     round_review = tmp_path / "round-review.json"
-    _write_difference_review(round_review)
+    _write_difference_review(round_review, job=job)
     assert main(["review", str(job), str(round_review)]) == 0
     before = (job / "review.json").read_bytes()
     patches = tmp_path / "patches.json"
@@ -638,7 +1029,7 @@ def test_repair_requires_difference_id_in_every_patch_operation(tmp_path):
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     round_review = tmp_path / "round-review.json"
-    _write_difference_review(round_review)
+    _write_difference_review(round_review, job=job)
     assert main(["review", str(job), str(round_review)]) == 0
     patches = tmp_path / "patches.json"
     patches.write_text(json.dumps({
@@ -844,7 +1235,7 @@ def test_malformed_review_and_patch_json_are_input_errors(tmp_path):
     assert main(["review", str(job), str(malformed)]) == 2
 
     round_review = tmp_path / "round-review.json"
-    _write_difference_review(round_review)
+    _write_difference_review(round_review, job=job)
     assert main(["review", str(job), str(round_review)]) == 0
     assert main(["repair", str(job), str(GOLDEN_A), "--patches", str(malformed), "--dpi", "72"]) == 2
 
@@ -855,7 +1246,7 @@ def test_two_reviewed_rounds_without_difference_reduction_stop_for_human(tmp_pat
     job = tmp_path / "job"
     assert main(["build", str(GOLDEN_A), "--source", str(SOURCE_A), "--out", str(job), "--dpi", "72"]) == 0
     review_1 = tmp_path / "review-1.json"
-    _write_difference_review(review_1, round_number=1, count=1)
+    _write_difference_review(review_1, round_number=1, count=1, job=job)
     assert main(["review", str(job), str(review_1)]) == 0
     patches = tmp_path / "patches.json"
     patches.write_text(json.dumps({
@@ -863,7 +1254,7 @@ def test_two_reviewed_rounds_without_difference_reduction_stop_for_human(tmp_pat
     }), encoding="utf-8")
     assert main(["repair", str(job), str(_moved_r1_ir(tmp_path / "repaired.json")), "--patches", str(patches), "--dpi", "72"]) == 0
     review_2 = tmp_path / "review-2.json"
-    _write_difference_review(review_2, round_number=2, count=1)
+    _write_difference_review(review_2, round_number=2, count=1, job=job)
 
     assert main(["review", str(job), str(review_2)]) == 0
     state = json.loads((job / "review.json").read_text(encoding="utf-8"))

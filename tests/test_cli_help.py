@@ -41,6 +41,28 @@ def test_doctor_help_is_available(capsys):
     assert "--json" in output
 
 
+def test_perceive_help_exposes_seed_ir_and_job_output(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["perceive", "--help"])
+
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    assert "IMAGE" in output
+    assert "--out" in output
+    assert "--seed-ir" in output
+
+
+def test_audit_help_exposes_json_and_optional_output(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["audit", "--help"])
+
+    assert exc.value.code == 0
+    output = capsys.readouterr().out
+    assert "IR_FILE" in output
+    assert "--json" in output
+    assert "--out" in output
+
+
 @pytest.mark.tex
 def test_doctor_json_reports_all_required_checks(capsys):
     rc = main(["doctor", "--json"])

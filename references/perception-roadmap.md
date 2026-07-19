@@ -47,7 +47,9 @@ preprocess
 
 Each stage must retain observed evidence, provenance, confidence, and unresolved
 alternatives. Projected expectations from an existing IR are weak supervision,
-not pixel detections.
+not pixel detections. The shipped machine-readable sidecar contract is
+`schemas/perception-evidence.schema.json`; its invariants and semantic referential checks
+are documented in `references/perception-evidence-contract.md`.
 
 ### Preprocess
 
@@ -127,8 +129,10 @@ Return `needs_human` when any of the following remains unresolved:
 
 Return workflow state `valid` only with zero blocking topology ambiguity and after
 the candidate IR passes canonical validation, deterministic serialization, rendering,
-and layout checks. If a source comparison exists, return `needs_review` until a complete
-region review is explicitly approved.
+layout checks, and deterministic electrical audit generation. If a source comparison exists,
+return `needs_review` until a complete region review and hash-bound `electrical_assessment`
+are explicitly approved. The v0.5 electrical audit is a second evidence chain only; it does
+not automatically select junction/crossing or pin-attachment candidates and never rewrites IR.
 
 ## Evaluation policy
 

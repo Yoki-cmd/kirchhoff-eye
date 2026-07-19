@@ -24,7 +24,7 @@ def test_pyproject_declares_package_metadata_and_console_script():
     project = _pyproject()["project"]
 
     assert project["name"] == "kirchhoff-eye"
-    assert project["version"] == "0.3.0"
+    assert project["version"] == "0.5.0"
     assert project["requires-python"] == ">=3.9"
     assert {item.split(">=", 1)[0] for item in project["dependencies"]} == {
         "Pillow",
@@ -36,7 +36,7 @@ def test_pyproject_declares_package_metadata_and_console_script():
 def test_package_imports_without_test_side_path_mutation():
     import kirchhoff_eye
 
-    assert kirchhoff_eye.__version__ == "0.3.0"
+    assert kirchhoff_eye.__version__ == "0.5.0"
     assert Path(kirchhoff_eye.__file__).resolve().is_relative_to(ROOT / "src")
 
 

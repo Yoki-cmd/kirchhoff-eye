@@ -31,14 +31,15 @@ def test_perception_roadmap_documents_scope_architecture_and_status_policy():
         assert phrase in text
 
 
-def test_public_docs_link_the_perception_roadmap_without_claiming_it_is_shipped():
+def test_public_docs_link_the_roadmap_and_describe_bounded_perception_honestly():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
 
     assert "references/perception-roadmap.md" in readme
     assert "references/perception-roadmap.md" in skill
-    assert "future" in readme.lower()
-    assert "does not ship" in readme.lower()
+    assert "experimental bounded perception" in readme.lower()
+    assert "does **not** claim autonomous arbitrary-image" in readme.lower()
+    assert "needs_human" in readme
 
 
 def test_perception_dependencies_remain_out_of_the_default_package():

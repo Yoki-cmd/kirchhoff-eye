@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kirchhoff-perception-evidence-1.0.schema.json",
+  "title": "kirchhoff-perception-evidence/1.0",
+  "description": "Sidecar evidence for bounded image perception. It is deliberately separate from canonical kirchhoff-ir.",
+  "type": "object",
+  "required": ["version", "source", "transform", "candidate_ir_sha256", "candidates", "review_queue"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": "kirchhoff-perception-evidence/1.0"},
+    "source": {
+      "type": "object",
+      "required": ["sha256", "width_px", "height_px", "mime_type"],
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {"$ref": "#/definitions/sha256"},
+        "width_px": {"type": "integer", "minimum": 1},
+        "height_px": {"type": "integer", "minimum": 1},
+        "mime_type": {"type": "string", "pattern": "^image/"}
+      }
+    },
+    "transform": {
+      "type": "object",
+      "required": ["pixel_to_ir", "ir_to_pixel"],
+      "additionalProperties": false,
+      "properties": {
+        "pixel_to_ir": {"$ref": "#/definitions/affine2d"},
+        "ir_to_pixel": {"$ref": "#/definitions/affine2d"}
+      }
+    },
+    "candidate_ir_sha256": {"$ref": "#/definitions/sha256"},
+    "candidates": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/candidate"}
+    },
+    "review_queue": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/reviewItem"}
+    }
+  },
+  "definitions": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "point2": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"type": "number"}
+    },
+    "rect": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"type": "integer", "minimum": 0}
+    },
+    "affine2d": {
+      "description": "Six coefficients [a,b,c,d,e,f] for x'=a*x+c*y+e, y'=b*x+d*y+f.",
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"type": "number"}
+    },
+    "alternative": {
+      "type": "object",
+      "required": ["id", "label", "score"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "payload": {"type": "object"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["stage", "detector"],
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "enum": ["preprocess", "symbols", "wire_graph", "intersections", "pin_attach", "solver", "text"]
+        },
+        "detector": {"type": "string", "minLength": 1},
+        "artifact_sha256": {"$ref": "#/definitions/sha256"},
+        "note": {"type": "string"}
+      }
+    },
+    "resolution": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["status", "selected_alternative_id"],
+          "additionalProperties": false,
+          "properties": {
+            "status": {"const": "selected"},
+            "selected_alternative_id": {"type": "string", "minLength": 1},
+            "reviewer_note": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "required": ["status", "blocking_reason_code"],
+          "additionalProperties": false,
+          "properties": {
+            "status": {"const": "unresolved"},
+            "blocking_reason_code": {"type": "string", "minLength": 1},
+            "reviewer_note": {"type": "string"}
+          }
+        }
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "id", "kind", "crop", "provenance", "confidence", "alternatives",
+        "resolution", "affected_ir_paths", "priority"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {
+          "enum": ["symbol", "wire_segment", "junction_crossing", "pin_attachment", "text_ownership", "annotation"]
+        },
+        "crop": {"$ref": "#/definitions/rect"},
+        "marker_px": {"$ref": "#/definitions/point2"},
+        "provenance": {"$ref": "#/definitions/provenance"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "alternatives": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/definitions/alternative"}
+        },
+        "resolution": {"$ref": "#/definitions/resolution"},
+        "affected_ir_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^/"}
+        },
+        "priority": {"enum": ["blocking", "high", "normal", "low"]},
+        "evidence": {"type": "object"}
+      }
+    },
+    "reviewItem": {
+      "type": "object",
+      "required": ["candidate_id", "priority", "reason_code"],
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"type": "string", "minLength": 1},
+        "priority": {"enum": ["blocking", "high", "normal", "low"]},
+        "reason_code": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

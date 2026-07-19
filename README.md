@@ -18,6 +18,15 @@
 
 Kirchhoff-eye is an IR-driven circuit-drawing Agent Skill with a deterministic backend. Image redraw is its first mature workflow, while natural-language briefs, netlists, edit requests, review, repair, approval, and direct rendering share the same canonical JSON IR boundary.
 
+Version 0.5 adds a conservative, hash-bound **electrical plausibility audit** while retaining the experimental bounded perception frontend. Every validated IR gets `electrical-audit.json`; source-backed review also requires an AI-authored `electrical_assessment`. Canonical IR remains the only structural truth source, and neither layer silently changes topology.
+
+Every source-backed delivery is judged on two independent axes:
+
+- **Source fidelity** — does the IR/redraw faithfully preserve the source diagram?
+- **Electrical plausibility** — is the source-described circuit self-consistent within the explicitly analyzed scope?
+
+A result may be source-faithful yet electrically suspicious. Kirchhoff-eye reports that distinction instead of converting the source into a more familiar circuit.
+
 The point is not to trace every pixel. The point is to preserve the circuit.
 
 ## Why Kirchhoff-eye
@@ -35,7 +44,7 @@ Kirchhoff-eye treats the diagram as a graph with geometry:
 | Honest uncertainty | Explicit `valid`, `needs_review`, `needs_human`, and `approved` states |
 
 > [!IMPORTANT]
-> The public v0.3 repository does not ship an autonomous arbitrary-image/prose/netlist-to-IR recognizer. Input interpretation remains an Agent/human review step. Once the IR exists, the validation, rendering, review-state, scoring, and delivery pipeline is repeatable.
+> The public v0.4 repository does **not** claim autonomous arbitrary-image/prose/netlist-to-IR recognition. `kirchhoff-eye perceive` is narrow, evidence-producing, and refusal-first; ambiguous classes, pin attachments, and junction/crossing states are blockers rather than guessed canonical facts. Once reviewed IR exists, validation, rendering, review-state, scoring, and delivery remain deterministic.
 
 ## See the output
 
@@ -63,9 +72,9 @@ source image
 AI / human inspection
     │
     ▼
-reviewed JSON IR ──► schema + topology validation
-    │                           │
-    │                           └──► actionable findings
+reviewed JSON IR ──► schema + topology validation ──► electrical-audit.json
+    │                           │                              │
+    │                           └──► actionable findings       └──► electrical_assessment
     ▼
 circuitikz serialization
     │
@@ -92,6 +101,12 @@ Activate the environment, then install the project:
 ```bash
 python -m pip install -e ".[dev]"
 kirchhoff-eye --help
+
+# Experimental bounded perception job (may honestly stop at needs_human)
+kirchhoff-eye perceive source.png --out out/perception-job
+
+# Bind an agent/human-authored seed IR to source evidence and open review
+kirchhoff-eye perceive source.png --seed-ir draft.ir.json --out out/review-job
 ```
 
 ### 2. Check the toolchain
@@ -195,6 +210,7 @@ The package CLI handles the production path. The underlying scripts remain avail
 | Command | Purpose |
 |---|---|
 | `kirchhoff-eye build IR --source IMAGE --out DIR` | Build canonical IR artifacts; with a source, open a `needs_review` round |
+| `kirchhoff-eye audit IR --out electrical-audit.json [--json]` | Run deterministic first-principles/device-semantic checks without rendering |
 | `kirchhoff-eye review JOB REVIEW.json` | Record exactly one conclusion for every IR region and a structured difference table |
 | `kirchhoff-eye repair JOB IR --patches PATCHES.json` | Generate the next round and persist the applied patch log |
 | `kirchhoff-eye approve JOB` | Explicitly approve a clean reviewed round |
@@ -249,7 +265,7 @@ A small IR fragment looks like this:
 }
 ```
 
-The full field and topology contract lives in `references/ir-schema.md`. Multi-terminal pin anchors are recorded in `templates/anchors.json`; the machine-readable schema is `schemas/ir.schema.json`.
+The full field and topology contract lives in `references/ir-schema.md`. Electrical findings and AI dispositions are documented in `references/electrical-plausibility-audit.md`; machine contracts are `schemas/electrical-audit.schema.json` and `schemas/electrical-assessment.schema.json`. Multi-terminal pin anchors are recorded in `templates/anchors.json`; the canonical IR schema is `schemas/ir.schema.json`.
 
 ## Quality gates
 
