@@ -65,6 +65,12 @@ jobs:
       - name: Run review workflow integration
         run: python -m pytest tests/test_review_workflow.py -q
 
+      - name: Run perception seed-IR render regression
+        run: python -m pytest tests/test_perception_pipeline.py::test_seed_ir_is_hash_bound_and_enters_standard_eye_review_job_when_no_blocker -q
+
+      - name: Run concurrent review render regression
+        run: python -m pytest tests/test_pipeline_concurrency.py::test_concurrent_reviews_serialize_to_one_immutable_winner -q
+
       - name: Run synthetic fixture integration
         run: python -m pytest tests/test_synthetic_e2e.py -q -n auto
 

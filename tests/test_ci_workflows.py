@@ -69,9 +69,12 @@ def test_tex_workflow_exercises_compile_render_label_and_pipeline_paths():
 def test_direct_rendering_regressions_are_marked_tex():
     perception = (ROOT / "tests" / "test_perception_pipeline.py").read_text(encoding="utf-8")
     concurrency = (ROOT / "tests" / "test_pipeline_concurrency.py").read_text(encoding="utf-8")
+    workflow = workflow_text(TEX_WORKFLOW)
 
     assert "@pytest.mark.tex\ndef test_seed_ir_is_hash_bound" in perception
     assert "@pytest.mark.tex\ndef test_concurrent_reviews_serialize" in concurrency
+    assert "tests/test_perception_pipeline.py::test_seed_ir_is_hash_bound" in workflow
+    assert "tests/test_pipeline_concurrency.py::test_concurrent_reviews_serialize" in workflow
 
 
 def test_workflows_use_stable_official_actions_and_no_machine_paths():
