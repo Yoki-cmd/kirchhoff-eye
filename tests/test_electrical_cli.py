@@ -2,6 +2,7 @@
 """Standalone audit CLI validates canonical IR and publishes atomically."""
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -79,21 +80,29 @@ def test_pipeline_audit_wrapper_returns_report_without_rendering():
     assert report["verdict"] == "pass"
 
 
-def test_audit_cli_parallel_publication_uses_unique_temp_files(tmp_path, monkeypatch):
+def test_audit_cli_serializes_parallel_publication_to_one_target(tmp_path, monkeypatch):
     from kirchhoff_eye.cli import main
+    import kirchhoff_eye.pipeline as pipeline
 
     output = tmp_path / "report.json"
-    barrier = threading.Barrier(2)
-    original_replace = Path.replace
-    sources = []
+    original_write = pipeline._write_json
+    guard = threading.Lock()
+    active = 0
+    maximum = 0
 
-    def synchronized_replace(source, target):
-        if Path(target) == output and source.suffix == ".tmp":
-            sources.append(Path(source))
-            barrier.wait(timeout=5)
-        return original_replace(source, target)
+    def delayed_write(path, document):
+        nonlocal active, maximum
+        with guard:
+            active += 1
+            maximum = max(maximum, active)
+        try:
+            time.sleep(0.05)
+            return original_write(path, document)
+        finally:
+            with guard:
+                active -= 1
 
-    monkeypatch.setattr(type(output), "replace", synchronized_replace)
+    monkeypatch.setattr(pipeline, "_write_json", delayed_write)
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(
             lambda _index: main(["audit", str(GOLDEN_A), "--out", str(output)]),
@@ -101,6 +110,21 @@ def test_audit_cli_parallel_publication_uses_unique_temp_files(tmp_path, monkeyp
         ))
 
     assert results == [0, 0]
-    assert len(set(sources)) == 2
+    assert maximum == 1
     assert json.loads(output.read_text(encoding="utf-8"))["verdict"] == "pass"
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_audit_cli_parallel_publication_is_stable_under_repetition(tmp_path):
+    from kirchhoff_eye.cli import main
+
+    for index in range(20):
+        output = tmp_path / f"report-{index}.json"
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(
+                lambda _worker: main(["audit", str(GOLDEN_A), "--out", str(output)]),
+                range(2),
+            ))
+
+        assert results == [0, 0]
+        assert json.loads(output.read_text(encoding="utf-8"))["verdict"] == "pass"

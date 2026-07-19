@@ -152,7 +152,9 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
 
 def write_json_atomic(path: Path, data: Dict[str, Any]) -> None:
     """Publish a JSON document with a unique same-directory temporary file."""
-    _write_json(Path(path), data)
+    target = Path(path)
+    with _target_lock(target):
+        _write_json(target, data)
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -662,6 +664,17 @@ def _windows_job_mutex(output: Path):
             raise OSError(ctypes.get_last_error(), "ReleaseMutex failed")
         if not kernel32.CloseHandle(handle):
             raise OSError(ctypes.get_last_error(), "CloseHandle failed")
+
+
+@contextmanager
+def _target_lock(target: Path):
+    """Serialize publication to one target, including independent Windows processes."""
+    with _thread_lock(target):
+        if os.name == "nt":
+            with _windows_job_mutex(target):
+                yield
+        else:
+            yield
 
 
 @contextmanager
