@@ -188,6 +188,7 @@ def test_json_write_uses_a_unique_target_side_temp_file(tmp_path, monkeypatch):
     assert len(seen) == 2
     assert seen[0] != seen[1]
 
+@pytest.mark.tex
 def test_concurrent_reviews_serialize_to_one_immutable_winner(tmp_path):
     from kirchhoff_eye.cli import main
 

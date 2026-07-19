@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from kirchhoff_eye.perception.pipeline import perceive
@@ -41,6 +42,7 @@ def test_large_image_without_model_stays_needs_human_with_reviewable_evidence(tm
     assert (out / "preprocess" / "normalized.png").is_file()
 
 
+@pytest.mark.tex
 def test_seed_ir_is_hash_bound_and_enters_standard_eye_review_job_when_no_blocker(tmp_path, monkeypatch, golden_a):
     source = tmp_path / "large-source.png"
     Image.new("L", (800, 600), 255).save(source)

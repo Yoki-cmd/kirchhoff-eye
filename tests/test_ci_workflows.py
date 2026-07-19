@@ -66,6 +66,14 @@ def test_tex_workflow_exercises_compile_render_label_and_pipeline_paths():
     assert "tests/test_synthetic_e2e.py -q -n auto" in text
 
 
+def test_direct_rendering_regressions_are_marked_tex():
+    perception = (ROOT / "tests" / "test_perception_pipeline.py").read_text(encoding="utf-8")
+    concurrency = (ROOT / "tests" / "test_pipeline_concurrency.py").read_text(encoding="utf-8")
+
+    assert "@pytest.mark.tex\ndef test_seed_ir_is_hash_bound" in perception
+    assert "@pytest.mark.tex\ndef test_concurrent_reviews_serialize" in concurrency
+
+
 def test_workflows_use_stable_official_actions_and_no_machine_paths():
     windows_user_prefix = "C:" + "\\" + "Users" + "\\"
     windows_drive_prefix = "E:" + "\\"
